@@ -31,6 +31,23 @@ test('standalone SVG retains its paragraph alignment during local rendering',()=
   assert.deepEqual(findRasterTargets(doc).map(node=>node.id),['shape']);
 });
 
+test('captures a flex heading and its negative-margin accent as one centered local block',()=>{
+  const doc=parse('<section style="text-align:center"><section id="heading-box" style="display:inline-block;padding:0 6px"><section style="display:flex"><section style="height:35px"><p><strong>实验器材</strong></p></section><section id="accent" data-sync-background-url="x" style="width:20px;height:25px;margin-top:-14px"><br></section></section></section><p id="body">正文仍为原生</p></section>');
+  const targets=findRasterTargets(doc);
+  assert.deepEqual(targets.map(node=>node.id),['heading-box']);
+  assert.equal(targets[0].textContent,'实验器材');
+  assert.equal(targets[0].contains(doc.getElementById('body')),false);
+});
+
+test('does not promote an accent into a broad flex article or a heading with images or formulas',()=>{
+  for(const content of ['<p>第一段</p><p>第二段</p>', '<p>标题<img src="animation.gif"></p>', '<p>标题<span data-formula="x^2"></span></p>', `<p>${'长文'.repeat(100)}</p>`]) {
+    const doc=parse(`<section style="display:flex"><section>${content}</section><section id="accent" data-sync-background-url="x" style="margin-top:-14px;height:25px"></section></section>`);
+    const targets=findRasterTargets(doc);
+    assert.ok(targets.every(node=>node.id==='accent' || node.tagName==='P'));
+    assert.equal(targets.some(node=>node.tagName==='SECTION'&&node.id!=='accent'),false);
+  }
+});
+
 for(const mime of ['image/gif','image/png','image/webp']) {
   test(`refuses animated ${mime} instead of converting it into a still image`, async()=>{
     const source='<p>保留动画<img src="https://mmbiz.qpic.cn/animation"></p>';

@@ -13,8 +13,8 @@ const fixtureDir = path.join(root, '测试文章');
 globalThis.DOMParser = new JSDOM('').window.DOMParser;
 const expectations = [
   {file:'不抽血不拍片，闻一闻就能接收身体警报？？？.html', collection:'翻译专栏', images:4, gifs:0, formulas:0, superscripts:0, subscripts:0, backgrounds:1},
-  {file:'为什么只睡20分钟，下午就能精神满满？_ No. 537.html', collection:'问答', images:9, gifs:0, formulas:7, superscripts:19, subscripts:0, backgrounds:1},
-  {file:'你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html', collection:'正经玩', images:16, gifs:1, formulas:4, superscripts:0, subscripts:7, backgrounds:0},
+  {file:'为什么只睡20分钟，下午就能精神满满？_ No. 537.html', collection:'问答', images:9, gifs:0, formulas:7, superscripts:19, subscripts:0, backgrounds:12},
+  {file:'你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html', collection:'正经玩', images:16, gifs:1, formulas:4, superscripts:0, subscripts:7, backgrounds:1},
   {file:'摸了半天找不到头，胶带却记得你撕到哪儿？.html', collection:'线上科学日', images:12, gifs:0, formulas:0, superscripts:0, subscripts:4, backgrounds:0},
   {file:'要宣布翻篇了？那我磁化损失呢，厉娜.html', collection:'线上科学日', images:64, gifs:0, formulas:0, superscripts:0, subscripts:0, backgrounds:0},
 ];
@@ -65,6 +65,7 @@ for (const expected of expectations) {
     const cleanedAgain = cleanArticle(parsed.html,{sourceUrl:parsed.sourceUrl});
     for (const key of ['images','gifs','formulas','superscripts','subscripts','backgrounds']) assert.equal(cleanedAgain.stats[key],parsed.stats[key],`second cleanup ${key}`);
     assert.deepEqual(cleanedAgain.blockingIssues,parsed.blockingIssues);
+    if (expected.collection==='问答') assert.deepEqual([...document.querySelectorAll('[data-sync-background-url]')].map(node=>node.textContent.trim()),Array.from({length:12},(_,i)=>`Q${i+1}`));
     if (expected.collection==='正经玩') assert.equal(parsed.coverUrl,'https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJWOFjB3xPPD8kc4xhicGDkmqHVZUuicHQP65XJwUSZcTuZ9CJyAa3j6KjUCw70phMYIIBI1HbxYTotSz3o86TCY3EfZgazCScdg0/0?wx_fmt=jpeg');
   });
 }
@@ -74,6 +75,7 @@ if (process.env.WRITE_ARTICLE_AUDIT === '1') {
     schemaVersion:1,
     verification:'Local HTML parsing only. Page scripts were not executed; no external requests were made. Bilibili save/readback is a separate integration check.',
     localAssetResolution:'Match sourceUrl to selected File using localPath relative to the saved HTML folder. data-src remains the original remote URL; localasset:/// + encodeURIComponent(localPath) is used only when no remote image source exists. Read image bytes and substitute an object/data URL for preview, then upload original bytes. Do not infer resource mapping by filename alone.',
+    backgroundExtraction:'WeChat data-lazy-bgimg takes precedence over a transparent CSS placeholder. The 正经玩 实验器材 title contains a 20×25px decoration with margin-top:-14px that was previously omitted when only the placeholder was inspected; it now requires rendering together with its surrounding title layout. 问答 contains backgrounds for every Q1–Q12 label; previously only the already-loaded Q1 was retained while Q2–Q12 were mistaken for transparent placeholders.',
     articles:entries,
   },null,2)+'\n');
 }

@@ -2,6 +2,7 @@
   "schemaVersion": 1,
   "verification": "Local HTML parsing only. Page scripts were not executed; no external requests were made. Bilibili save/readback is a separate integration check.",
   "localAssetResolution": "Match sourceUrl to selected File using localPath relative to the saved HTML folder. data-src remains the original remote URL; localasset:/// + encodeURIComponent(localPath) is used only when no remote image source exists. Read image bytes and substitute an object/data URL for preview, then upload original bytes. Do not infer resource mapping by filename alone.",
+  "backgroundExtraction": "WeChat data-lazy-bgimg takes precedence over a transparent CSS placeholder. The 正经玩 实验器材 title contains a 20×25px decoration with margin-top:-14px that was previously omitted when only the placeholder was inspected; it now requires rendering together with its surrounding title layout. 问答 contains backgrounds for every Q1–Q12 label; previously only the already-loaded Q1 was retained while Q2–Q12 were mistaken for transparent placeholders.",
   "articles": [
     {
       "file": "不抽血不拍片，闻一闻就能接收身体警报？？？.html",
@@ -21,6 +22,7 @@
         "removedImagePlaceholders": 0,
         "removedEmptySvg": 24,
         "removedTransparentBackgrounds": 0,
+        "removedHiddenElements": 1,
         "trimmedTail": 1,
         "images": 4,
         "gifs": 0,
@@ -62,7 +64,7 @@
       "localAssets": [],
       "backgrounds": [
         {
-          "url": "https://mmbiz.qpic.cn/mmbiz_png/QAEJXB03eMCUWwsjQAQWz2S3X65PndTa7YfibSCjXwoyc11v0mc5oK1AViarw0CoEQWItPRaRHsLXXiboc89Y323A/640?wx_fmt=png&tp=webp&wxfrom=15&wx_lazy=1",
+          "url": "https://mmbiz.qpic.cn/mmbiz_png/QAEJXB03eMCUWwsjQAQWz2S3X65PndTa7YfibSCjXwoyc11v0mc5oK1AViarw0CoEQWItPRaRHsLXXiboc89Y323A/640?wx_fmt=png",
           "textPreview": "【互动问题：你身边有没有“鼻子特别灵”的人呢？或者听说过猫狗能闻出主人生病这种事呢？】请大",
           "requiresLocalLayoutConversion": true
         }
@@ -85,18 +87,19 @@
         "removedEmptyBlocks": 14,
         "removedImagePlaceholders": 1,
         "removedEmptySvg": 0,
-        "removedTransparentBackgrounds": 11,
+        "removedTransparentBackgrounds": 0,
+        "removedHiddenElements": 1,
         "trimmedTail": 1,
         "images": 9,
         "gifs": 0,
         "formulas": 7,
-        "backgrounds": 1,
+        "backgrounds": 12,
         "superscripts": 19,
         "subscripts": 0
       },
       "formatting": {
         "boldNodes": 174,
-        "coloredNodes": 326,
+        "coloredNodes": 333,
         "colors": [
           "rgb(62, 62, 62)",
           "rgba(0, 0, 0, 0.9)",
@@ -135,8 +138,63 @@
       ],
       "backgrounds": [
         {
-          "url": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJXp1PFMFAUuJF5rp74NTZy4LyUNMGaCBTtNwHiaAw4GLpSghdfpCG0KsibJSDnS4vdtWUSBgA1wEbIIljeiaje25rkica4VTuibon48/640?wx_fmt=webp&from=appmsg&tp=webp&wxfrom=15&wx_lazy=1",
+          "url": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJXp1PFMFAUuJF5rp74NTZy4LyUNMGaCBTtNwHiaAw4GLpSghdfpCG0KsibJSDnS4vdtWUSBgA1wEbIIljeiaje25rkica4VTuibon48/640?wx_fmt=webp&from=appmsg",
           "textPreview": "Q1",
+          "requiresLocalLayoutConversion": true
+        },
+        {
+          "url": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJVoheurSoOnyIEMhicAA3TLwIep04Xl15DOXwzicXHeTLwFe0by4PY82gytwicUZIwVxN8DpHd6nyiavjqYFlM99cfU8icPGr4xVB7g/640?wx_fmt=webp&from=appmsg",
+          "textPreview": "Q2",
+          "requiresLocalLayoutConversion": true
+        },
+        {
+          "url": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJWuHhHNU9NSDqdSLKajfVf7WYCQTPvSKBjQfhqrezDwIDcZb1QpicJ5y9DZmgd8Hlb2txFB62kaPDiagbUNdgg2bniaZgRt8Pg11c/640?wx_fmt=webp&from=appmsg",
+          "textPreview": "Q3",
+          "requiresLocalLayoutConversion": true
+        },
+        {
+          "url": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJWlkE77syD3v5SosVTBBw6pObibYYrOfYO6SNz5WOVB9WN2QdyylTN31CMWTDqN79FOvl6AjDC12mMxic2Nb1uwJ5HqvuIZQyTK0/640?wx_fmt=webp&from=appmsg",
+          "textPreview": "Q4",
+          "requiresLocalLayoutConversion": true
+        },
+        {
+          "url": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJVqFRFuq8I9hN5tjKvMibQJFlhU3o7Sw0z9fOfb98UibHtia8Wvobo9PCCPBtRjmHEfMNFs5HibbcWzAS3yDGhdF8m4Q2A4DDQMLQM/640?wx_fmt=webp&from=appmsg",
+          "textPreview": "Q5",
+          "requiresLocalLayoutConversion": true
+        },
+        {
+          "url": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJWSI6KsEUJd27yGeaib1JpILs4ibjlLaabknyxLErUWZ5DLUOJAhqTmJBT3MZZbsCXYg9u15TAMPWpbE1BvPE8u8NfuzbJ6k7kOI/640?wx_fmt=webp&from=appmsg",
+          "textPreview": "Q6",
+          "requiresLocalLayoutConversion": true
+        },
+        {
+          "url": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJUibBQsNbhZkL4qcWZKZ4pO1d5LzGEWxsYSBEz4IibK1noDsbXiaGARwvugpbXuiaia2QCBpayuK51eVXia5ECVF8n8QY0ZL8b9AXuJQ/640?wx_fmt=webp&from=appmsg",
+          "textPreview": "Q7",
+          "requiresLocalLayoutConversion": true
+        },
+        {
+          "url": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJUBtDyRicAul3GzcI3KsL8Zxf1N0KFyOh7MzKFML4KvIjPsLDbdppG9DaE4QpdgHunCXofN6WzSe7AtokqVoZZqCKa62k4W8XEM/640?wx_fmt=webp&from=appmsg",
+          "textPreview": "Q8",
+          "requiresLocalLayoutConversion": true
+        },
+        {
+          "url": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJWAn4ib97kzToPLvCejkb2wOTghwFdX3CAqoa1jDhDfiaGmS4TIPDic33PCLDkzpDoictA40tahk5RbwTNZrdLkKIE5evSqJhJYMc8/640?wx_fmt=webp&from=appmsg",
+          "textPreview": "Q9",
+          "requiresLocalLayoutConversion": true
+        },
+        {
+          "url": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJVHBXntpYSpl6YhLJqsrDf6eukTe30BxKiaAjeqvT5Al5bNXc9wSyd8SIdIHCLicUwY6vnqGyo0ux6W9cX1yGhy71GEtGJPEJKco/640?wx_fmt=webp&from=appmsg",
+          "textPreview": "Q10",
+          "requiresLocalLayoutConversion": true
+        },
+        {
+          "url": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJUZJlVI41nIS78ps2kicfqicvWTcCMI2Vc7AlIibwcI3GakQasFeZ8Vwq6ypMqteRibxIQeGOKxJK6QmVicCsBfhuib90H4uvia6DB8nE/640?wx_fmt=webp&from=appmsg",
+          "textPreview": "Q11",
+          "requiresLocalLayoutConversion": true
+        },
+        {
+          "url": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJW6dwUdLN2F3YYBPDMOQD3hJ4xxv3afsr8tkWkG6GKa7kferDmZf2HAzUruUmymrCzibj8x5QtT0Gqf4J84BQWibv1IrG71W4ASw/640?wx_fmt=webp&from=appmsg",
+          "textPreview": "Q12",
           "requiresLocalLayoutConversion": true
         }
       ]
@@ -155,21 +213,22 @@
       },
       "retained": {
         "removedLinks": 0,
-        "removedEmptyBlocks": 129,
+        "removedEmptyBlocks": 128,
         "removedImagePlaceholders": 9,
         "removedEmptySvg": 0,
-        "removedTransparentBackgrounds": 1,
+        "removedTransparentBackgrounds": 0,
+        "removedHiddenElements": 1,
         "trimmedTail": 1,
         "images": 16,
         "gifs": 1,
         "formulas": 4,
-        "backgrounds": 0,
+        "backgrounds": 1,
         "superscripts": 0,
         "subscripts": 7
       },
       "formatting": {
         "boldNodes": 38,
-        "coloredNodes": 47,
+        "coloredNodes": 48,
         "colors": [
           "rgb(0, 128, 255)",
           "rgb(62, 62, 62)",
@@ -186,7 +245,9 @@
           "[\nd\\approx\n\\frac{R\\lambda}{S\\cos^2\\theta}\n]"
         ]
       },
-      "blockingIssues": [],
+      "blockingIssues": [
+        "原文含 CSS 背景图，需要转换对应局部排版后同步。"
+      ],
       "warnings": [
         "已删除回顾／近期热门文章标题及其后面的内容。",
         "已清除 9 个没有内容的微信图片占位标签。"
@@ -198,7 +259,13 @@
           "available": true
         }
       ],
-      "backgrounds": []
+      "backgrounds": [
+        {
+          "url": "https://mmbiz.qpic.cn/mmbiz_png/QAEJXB03eMCWbOqJun8RDmrgeGs1Pic9tmZBFMonc3viblm3lSroxL7kQcJcmvN1aQzLfr3nBAsan67mAJvvHhvQ/640?wx_fmt=png",
+          "textPreview": "",
+          "requiresLocalLayoutConversion": true
+        }
+      ]
     },
     {
       "file": "摸了半天找不到头，胶带却记得你撕到哪儿？.html",
@@ -218,6 +285,7 @@
         "removedImagePlaceholders": 0,
         "removedEmptySvg": 0,
         "removedTransparentBackgrounds": 0,
+        "removedHiddenElements": 1,
         "trimmedTail": 1,
         "images": 12,
         "gifs": 0,
@@ -274,6 +342,7 @@
         "removedImagePlaceholders": 0,
         "removedEmptySvg": 15,
         "removedTransparentBackgrounds": 0,
+        "removedHiddenElements": 1,
         "trimmedTail": 1,
         "images": 64,
         "gifs": 0,

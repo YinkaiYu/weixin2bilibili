@@ -12,8 +12,8 @@ const directory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const document = new JSDOM('').window.document;
 const cases = [
   { name: '不抽血不拍片，闻一闻就能接收身体警报？？？.html', raster: 1, images: 5, formulas: 0 },
-  { name: '为什么只睡20分钟，下午就能精神满满？_ No. 537.html', raster: 1, images: 10, formulas: 26 },
-  { name: '你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html', raster: 1, images: 16, formulas: 11 },
+  { name: '为什么只睡20分钟，下午就能精神满满？_ No. 537.html', raster: 12, images: 21, formulas: 26 },
+  { name: '你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html', raster: 2, images: 17, formulas: 11 },
   { name: '摸了半天找不到头，胶带却记得你撕到哪儿？.html', raster: 0, images: 12, formulas: 4 },
   { name: '要宣布翻篇了？那我磁化损失呢，厉娜.html', raster: 0, images: 64, formulas: 0 },
 ];

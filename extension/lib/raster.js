@@ -22,6 +22,46 @@ function allIncluding(node, selector) {
   return [...(node.matches?.(selector) ? [node] : []), ...node.querySelectorAll(selector)];
 }
 
+function decoratedHeadingTarget(decoration, body) {
+  // A small empty background may be an accent attached to a flex heading. Its
+  // negative margin depends on that group; capturing it alone produces a strip.
+  // Keep this promotion narrow so a flex article or an image/GIF is not flattened.
+  const text = node => node.textContent.replace(/[\s\u200B-\u200D\uFEFF]/g, '');
+  const group = decoration.parentElement;
+  if (text(decoration) || !group || group === body || !['flex','inline-flex'].includes(group.style.display)) return null;
+  if (group.style.flexDirection && !['row','row-reverse'].includes(group.style.flexDirection)) return null;
+  if (group.querySelector('img,svg,math,table,ul,ol,li,[data-formula],[data-latex],[data-sync-unsupported]')) return null;
+  const title = text(group);
+  if (!title || title.length > 120 || [...group.children].filter(node => text(node)).length !== 1) return null;
+  const textBlocks = [...group.querySelectorAll('*')].filter(node => BLOCK.has(node.tagName) && text(node) && ![...node.querySelectorAll('*')].some(child => BLOCK.has(child.tagName) && text(child)));
+  if (textBlocks.length > 1) return null;
+  let target = group;
+  // Preserve the shrink-wrapped heading box. Its outer text-align is inherited
+  // by the rendering wrapper, so a centered title stays centered.
+  while (target.parentElement && target.parentElement !== body) {
+    const parent = target.parentElement;
+    if (!['inline-block','inline-flex'].includes(parent.style.display) || parent.children.length !== 1 || text(parent) !== text(target)) break;
+    target = parent;
+  }
+  return target;
+}
+
+function includeVerticalOverflow(wrapper) {
+  const box = wrapper.getBoundingClientRect();
+  let top = 0, bottom = 0;
+  for (const node of wrapper.querySelectorAll('*')) {
+    const rect = node.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      top = Math.max(top, Math.ceil(box.top - rect.top));
+      bottom = Math.max(bottom, Math.ceil(rect.bottom - box.bottom));
+    }
+  }
+  // Move the content with padding, rather than merely extending the canvas below
+  // it: a negative top margin can otherwise still be clipped above the canvas.
+  if (top) wrapper.style.paddingTop = `${top}px`;
+  if (bottom) wrapper.style.paddingBottom = `${bottom}px`;
+}
+
 /** Returns disjoint DOM elements in document order. The caller owns the inert document. */
 export function findRasterTargets(input) {
   const body = input.body || input;
@@ -30,7 +70,7 @@ export function findRasterTargets(input) {
     const tag = element.tagName.toUpperCase();
     if (element.hasAttribute('data-sync-background-url')) {
       const paragraph = nearestBlock(element,body);
-      candidates.add(!BLOCK.has(tag) && isLeafTextBlock(paragraph) ? paragraph : element);
+      candidates.add(decoratedHeadingTarget(element,body) || (!BLOCK.has(tag) && isLeafTextBlock(paragraph) ? paragraph : element));
       continue;
     }
     if (hasFormula(element)) continue;
@@ -214,9 +254,17 @@ export async function prepareForNative(html, {
       wrapper.style.position = 'fixed'; wrapper.style.left = '-10000px'; wrapper.style.top = '0';
       wrapper.style.width = `${WIDTH}px`; wrapper.style.boxSizing = 'border-box';
       wrapper.style.padding = '0'; wrapper.style.margin = '0'; wrapper.style.pointerEvents = 'none';
-      wrapper.style.zIndex = '-2147483647'; wrapper.style.display = 'flow-root';
+      wrapper.style.zIndex = '0'; wrapper.style.display = 'flow-root';
       const imported = owner.importNode(clone,true);
       if (imported.style) imported.style.maxWidth = '100%';
+      for (const element of allIncluding(imported,'*')) {
+        if (['flex','inline-flex'].includes(element.style?.display)) {
+          // html2canvas otherwise paints an inline-block ancestor's background
+          // over unpositioned flex descendants. A local stacking context keeps
+          // the browser's visible order without changing their layout.
+          element.style.position = 'relative'; element.style.zIndex = '0';
+        }
+      }
       wrapper.append(imported);
       owner.body.append(wrapper);
       for (const image of wrapper.querySelectorAll('img')) {
@@ -228,6 +276,7 @@ export async function prepareForNative(html, {
       }
       if (owner.fonts?.ready) await owner.fonts.ready;
       await replaceGraphics(wrapper,owner);
+      includeVerticalOverflow(wrapper);
       const rect = wrapper.getBoundingClientRect();
       const height = Math.ceil(Math.max(rect.height,wrapper.scrollHeight));
       const width = Math.ceil(Math.max(rect.width,wrapper.scrollWidth));

@@ -17,7 +17,16 @@ const skip=!available&&'本地用户样稿或真实读回记录未附带。';
 
 function reconstruct(){
   const document=new JSDOM('').window.document;
-  const article=parseArticle(fs.readFileSync(sourcePath,'utf8'),{document});
+  // This saved response predates lazy-background support. Reconstruct that
+  // historical input explicitly, not today's corrected decorated-heading image.
+  // Current complete backgrounds/layout are checked in real-opus and browser
+  // regressions; none of the production verification rules are relaxed here.
+  const historicalSource=new JSDOM(fs.readFileSync(sourcePath,'utf8'));
+  const lazyBackgrounds=[...historicalSource.window.document.querySelectorAll('#js_content [data-lazy-bgimg]')];
+  assert.equal(lazyBackgrounds.length,1);
+  assert.equal(lazyBackgrounds[0].parentElement.textContent.trim(),'实验器材');
+  lazyBackgrounds[0].removeAttribute('data-lazy-bgimg');
+  const article=parseArticle(historicalSource.serialize(),{document});
   const draft=JSON.parse(fs.readFileSync(draftPath,'utf8'));
   const doc=new document.defaultView.DOMParser().parseFromString(article.html,'text/html');
   const targets=findRasterTargets(doc);
@@ -44,7 +53,7 @@ function reconstruct(){
   return {payload,draft};
 }
 
-test('actual saved draft matches source text and formula content; true formatting changes remain visible',{skip},()=>{
+test('historical saved draft matches its source text and formulas; true formatting changes remain visible',{skip},()=>{
   const {payload,draft}=reconstruct();
   const before=payload.arg.opus.content.paragraphs,after=draft.opus.content.paragraphs;
   assert.equal(before.length,after.length);
@@ -80,7 +89,7 @@ test('actual saved draft matches source text and formula content; true formattin
 });
 
 test('historical live response default fields and CDN alias are wire-format equivalents, separate from its real typography differences',{skip},()=>{
-  const {draft}=reconstruct();
+  const draft=JSON.parse(fs.readFileSync(draftPath,'utf8'));
   // This second test isolates serialization defaults. Unlike the independent
   // source reconstruction above, it deliberately uses the recorded typography
   // on both sides. It makes no claim that the historical typography was correct.

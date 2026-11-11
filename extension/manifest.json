@@ -1,22 +1,69 @@
 {
   "manifest_version": 3,
   "name": "物理所B站导入微信文章",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "将微信公众号文章整理成可编辑的B站专栏草稿，转存图片并检查格式。不会自动发布。",
   "minimum_chrome_version": "120",
-  "permissions": ["storage", "activeTab", "scripting", "cookies", "declarativeNetRequestWithHostAccess"],
-  "host_permissions": [
-    "https://mp.weixin.qq.com/*", "https://*.qpic.cn/*", "https://*.qlogo.cn/*", "https://res.wx.qq.com/*",
-    "https://api.bilibili.com/*", "https://member.bilibili.com/*", "https://www.bilibili.com/*",
-    "https://*.hdslb.com/*", "https://*.biliimg.com/*"
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "cookies",
+    "declarativeNetRequestWithHostAccess"
   ],
-  "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" },
+  "host_permissions": [
+    "https://mp.weixin.qq.com/*",
+    "https://*.qpic.cn/*",
+    "https://*.qlogo.cn/*",
+    "https://res.wx.qq.com/*",
+    "https://api.bilibili.com/*",
+    "https://member.bilibili.com/*",
+    "https://www.bilibili.com/*",
+    "https://*.hdslb.com/*",
+    "https://*.biliimg.com/*"
+  ],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "action": {
     "default_title": "物理所B站导入微信文章",
-    "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" }
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
   },
-  "background": { "service_worker": "background.js", "type": "module" },
-  "content_scripts": [{"matches":["https://member.bilibili.com/*"],"js":["vendor/html2canvas.min.js","native-ui.js"],"run_at":"document_idle"}],
-  "web_accessible_resources": [{"resources":["lib/*.js"],"matches":["https://member.bilibili.com/*"]}],
-  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'" }
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://member.bilibili.com/*"
+      ],
+      "js": [
+        "vendor/html2canvas.min.js",
+        "native-ui.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "lib/*.js"
+      ],
+      "matches": [
+        "https://member.bilibili.com/*"
+      ]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'"
+  }
 }

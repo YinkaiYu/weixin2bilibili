@@ -5,7 +5,16 @@ const MATH_TAGS = new Set('math mrow mi mn mo mtext mspace ms mfrac msqrt mroot 
 const UNSUPPORTED_MEDIA = new Set('iframe video audio canvas object embed mpvoice qqmusic mp-common-videosnap mp-common-mpaudio mp-common-profile mp-common-product'.split(' '));
 const DROP_TAGS = new Set('script style link meta base noscript template form input button select textarea'.split(' '));
 const EMPTY_BLOCKS = new Set('p div section article header footer span h1 h2 h3 h4 h5 h6 blockquote li pre'.split(' '));
-const STYLE_PROPS = new Set('color background-color background-position background-repeat background-size background-attachment font-weight font-style text-decoration text-decoration-line font-size font-family vertical-align text-align line-height letter-spacing white-space width height max-width max-height margin margin-top margin-bottom margin-left margin-right padding padding-top padding-bottom padding-left padding-right border border-top border-bottom border-left border-right border-color border-width border-style border-radius display'.split(' '));
+const STYLE_PROPS = new Set('color background-color background-position background-repeat background-size background-attachment font-weight font-style text-decoration text-decoration-line font-size font-family vertical-align text-align line-height letter-spacing white-space width height min-width min-height max-width max-height box-sizing margin margin-top margin-bottom margin-left margin-right padding padding-top padding-bottom padding-left padding-right border border-top border-bottom border-left border-right border-color border-width border-style border-radius display justify-content align-content align-items align-self flex flex-basis flex-grow flex-shrink flex-direction flex-wrap gap row-gap column-gap order'.split(' '));
+// Chromium can enumerate expanded longhands even when the original inline style
+// used a permitted shorthand. Keep their equivalent forms as well (JSDOM does
+// not expand the same declarations during tests).
+for (const corner of ['top-left', 'top-right', 'bottom-right', 'bottom-left']) STYLE_PROPS.add(`border-${corner}-radius`);
+for (const side of ['top', 'right', 'bottom', 'left']) {
+  for (const component of ['width', 'style', 'color']) STYLE_PROPS.add(`border-${side}-${component}`);
+}
+STYLE_PROPS.add('background-position-x');
+STYLE_PROPS.add('background-position-y');
 const SVG_ATTRS = new Set('viewbox width height x y x1 x2 y1 y2 cx cy r rx ry d points fill fill-opacity stroke stroke-width stroke-linecap stroke-linejoin stroke-opacity opacity transform font-size font-family text-anchor dominant-baseline dx dy offset stop-color stop-opacity preserveaspectratio'.split(' '));
 const MATH_ATTRS = new Set('display mathvariant mathsize mathcolor mathbackground stretchy fence separator form lspace rspace linethickness numalign denomalign rowalign columnalign rowspacing columnspacing notation open close separators encoding'.split(' '));
 const IMAGE_ATTRS = new Set('src alt title width height data-type data-formula data-latex data-w data-h data-local-path data-sync-formula-image'.split(' '));
@@ -265,7 +274,11 @@ export function cleanArticle(html, options = {}) {
       if (formulaClass) element.setAttribute('data-sync-formula-image', 'true');
     }
     const backgroundValue = element.style?.backgroundImage || '';
-    const backgroundRaw = backgroundValue.match(/^url\(["']?(.*?)["']?\)$/i)?.[1];
+    const lazyBackground = element.getAttribute('data-lazy-bgimg')?.trim() || '';
+    // Saved WeChat pages may still have a transparent CSS placeholder while the
+    // real authored background remains in data-lazy-bgimg. Prefer that source so
+    // saved and already-loaded pages retain the same decoration/layout.
+    const backgroundRaw = lazyBackground || backgroundValue.match(/^url\(["']?(.*?)["']?\)$/i)?.[1];
     if (backgroundRaw) {
       if (backgroundRaw.endsWith(`;base64,${TRANSPARENT_PIXEL}`)) {
         element.style.removeProperty('background-image'); stats.removedTransparentBackgrounds++;

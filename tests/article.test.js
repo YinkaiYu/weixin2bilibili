@@ -100,6 +100,69 @@ test('reports background images rather than silently losing them during style cl
   assert.match(result.blockingIssues.join(' '), /CSS 背景图/);
 });
 
+test('restores a WeChat lazy background instead of discarding its transparent CSS placeholder', () => {
+  // This MIME-mislabeled PNG placeholder is the one actually present in the
+  // saved 正经玩 title decoration; its real image lives in data-lazy-bgimg.
+  const placeholder = 'data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQImWNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==';
+  const result = cleanArticle(`<section data-lazy-bgimg="https://mmbiz.qpic.cn/decoration.png" style="width:20px;height:25px;margin-top:-14px;background-image:url('${placeholder}');background-size:100% 100%"><br></section>`);
+  const element = doc(result.html).querySelector('section');
+  assert.equal(element.getAttribute('data-sync-background-url'), 'https://mmbiz.qpic.cn/decoration.png');
+  assert.equal(element.style.backgroundImage, 'url("https://mmbiz.qpic.cn/decoration.png")');
+  assert.equal(element.style.height, '25px');
+  assert.equal(element.style.marginTop, '-14px');
+  assert.equal(result.stats.backgrounds, 1);
+  assert.equal(result.stats.removedTransparentBackgrounds, 0);
+  assert.ok(result.blockingIssues.some(issue => issue.includes('CSS 背景图')));
+  assert.equal(cleanArticle(result.html).stats.backgrounds, 1);
+});
+
+test('does not promote executable or malformed lazy backgrounds into image sources', () => {
+  const result = cleanArticle('<section data-lazy-bgimg="javascript:alert(1)"><p>保留正文</p></section><section data-lazy-bgimg="data:text/html,invalid"><p>第二段</p></section>');
+  const content = doc(result.html);
+  assert.equal(content.querySelectorAll('[data-sync-background-url]').length, 0);
+  assert.equal(content.querySelectorAll('[data-sync-unsupported="CSS 背景图"]').length, 2);
+  assert.equal(content.body.textContent, '保留正文第二段');
+  assert.doesNotMatch(result.html, /javascript:|data:text\/html/);
+});
+
+test('preserves flex layout properties used by background decorations without allowing page positioning', () => {
+  const result = cleanArticle('<section style="display:flex;justify-content:center;align-items:flex-end;align-content:center;flex-direction:row;flex-wrap:wrap;gap:8px;row-gap:2px;column-gap:4px;position:fixed"><span style="flex:1 0 20px;align-self:center;order:2;min-width:10px;box-sizing:border-box">标题</span></section>');
+  const content = doc(result.html), section = content.querySelector('section'), span = content.querySelector('span');
+  for (const [key,value] of Object.entries({display:'flex',justifyContent:'center',alignItems:'flex-end',alignContent:'center',flexDirection:'row',flexWrap:'wrap',gap:'8px',rowGap:'2px',columnGap:'4px'})) assert.equal(section.style[key], value, key);
+  assert.equal(section.style.position, '');
+  assert.equal(span.style.flex, '1 0 20px');
+  assert.equal(span.style.alignSelf, 'center');
+  assert.equal(span.style.order, '2');
+  assert.equal(span.style.minWidth, '10px');
+  assert.equal(span.style.boxSizing, 'border-box');
+});
+
+test('preserves corner radii and border longhands exposed by Chromium shorthand expansion', () => {
+  const result = cleanArticle('<section style="border-top-left-radius:8px;border-top-right-radius:6px 10px;border-bottom-right-radius:4px;border-bottom-left-radius:2px;border-top-width:1px;border-top-style:solid;border-top-color:#fcb42b;border-right-width:2px;border-right-style:dashed;border-right-color:red;border-bottom-width:3px;border-bottom-style:dotted;border-bottom-color:blue;border-left-width:4px;border-left-style:double;border-left-color:green;position:fixed;top:0;left:0">实验器材</section>');
+  const style = doc(result.html).querySelector('section').style;
+  assert.equal(style.borderTopLeftRadius, '8px');
+  assert.equal(style.borderTopRightRadius, '6px 10px');
+  assert.equal(style.borderBottomRightRadius, '4px');
+  assert.equal(style.borderBottomLeftRadius, '2px');
+  assert.deepEqual([style.borderTopWidth,style.borderTopStyle,style.borderTopColor], ['1px','solid','rgb(252, 180, 43)']);
+  assert.deepEqual([style.borderRightWidth,style.borderRightStyle,style.borderRightColor], ['2px','dashed','red']);
+  assert.deepEqual([style.borderBottomWidth,style.borderBottomStyle,style.borderBottomColor], ['3px','dotted','blue']);
+  assert.deepEqual([style.borderLeftWidth,style.borderLeftStyle,style.borderLeftColor], ['4px','double','green']);
+  assert.equal(style.position, '');
+  assert.equal(style.top, '');
+  assert.equal(style.left, '');
+});
+
+test('preserves horizontal and vertical background position longhands for local rendering', () => {
+  const result = cleanArticle('<section style="background-image:url(https://mmbiz.qpic.cn/decoration.png);background-position-x:50%;background-position-y:top;background-repeat:no-repeat">Q1</section>');
+  const element = doc(result.html).querySelector('section');
+  assert.equal(element.style.getPropertyValue('background-position-x'), '50%');
+  assert.equal(element.style.getPropertyValue('background-position-y'), 'top');
+  assert.equal(element.style.backgroundRepeat, 'no-repeat');
+  assert.equal(element.getAttribute('data-sync-background-url'), 'https://mmbiz.qpic.cn/decoration.png');
+  assert.ok(result.blockingIssues.some(issue => issue.includes('CSS 背景图')));
+});
+
 test('saved article collection DOM and local image mapping are retained', () => {
   const result = parseArticle('<!-- saved from url=(0049)https://mp.weixin.qq.com/s/example --><div class="album_name_title">#正经玩</div><span class="js_album_directory__name">正经玩 · 目录</span><div id="js_content"><p><img data-src="https://mmbiz.qpic.cn/a.gif" src="./文章_files/640"></p><p><img src="./文章_files/640(1)"></p></div>');
   assert.equal(result.sourceUrl, 'https://mp.weixin.qq.com/s/example');
