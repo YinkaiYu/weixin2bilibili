@@ -77,6 +77,88 @@ function isEmptyWeChatImage(element) {
   return [...element.attributes].every(attr => EMPTY_IMAGE_METADATA.has(attr.name) || IMAGE_SOURCE_ATTRS.includes(attr.name) || (['alt', 'title', 'style'].includes(attr.name) && !attr.value.trim()));
 }
 
+const DECORATION_CONTENT = 'img,svg,math,table,video,audio,iframe,canvas,object,embed,[data-formula],[data-latex]';
+
+function cssColor(value) {
+  const text = String(value || '').trim().toLowerCase();
+  const named = {black:[0,0,0,1],white:[255,255,255,1],red:[255,0,0,1],blue:[0,0,255,1],green:[0,128,0,1],gray:[128,128,128,1],grey:[128,128,128,1],transparent:[0,0,0,0]};
+  if (named[text]) return named[text];
+  if (/^#[\da-f]{3}$/i.test(text)) return [...text.slice(1)].map(char=>parseInt(char+char,16)).concat(1);
+  if (/^#[\da-f]{6}$/i.test(text)) return [1,3,5].map(start=>parseInt(text.slice(start,start+2),16)).concat(1);
+  const rgb = text.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/);
+  return rgb ? [Number(rgb[1]),Number(rgb[2]),Number(rgb[3]),rgb[4]===undefined?1:Number(rgb[4])] : null;
+}
+
+function luminance(rgb) {
+  const linear = rgb.slice(0,3).map(channel=>{const value=channel/255;return value<=0.04045?value/12.92:((value+0.055)/1.055)**2.4;});
+  return linear[0]*0.2126+linear[1]*0.7152+linear[2]*0.0722;
+}
+
+function blend(foreground, background) {
+  return foreground.slice(0,3).map((channel,index)=>channel*foreground[3]+background[index]*(1-foreground[3])).concat(1);
+}
+
+function textReadableWithoutImage(element) {
+  const walker = element.ownerDocument.createTreeWalker(element,4);
+  while (walker.nextNode()) {
+    const text = walker.currentNode;
+    if (!normalizedText(text.textContent)) continue;
+    const ancestors = [];
+    for (let parent=text.parentElement;parent;parent=parent.parentElement) ancestors.unshift(parent);
+    let foreground = [0,0,0,1], background = [255,255,255,1];
+    for (const ancestor of ancestors) {
+      const color = ancestor.style?.color;
+      if (color && !['inherit','currentcolor'].includes(color.toLowerCase())) foreground=cssColor(color);
+      const solid = ancestor.style?.backgroundColor;
+      if (solid && solid!=='inherit') {
+        const parsed=cssColor(solid);
+        if (!parsed) return false;
+        background=blend(parsed,background);
+      }
+    }
+    if (!foreground) return false;
+    const ink=luminance(blend(foreground,background)), paper=luminance(background);
+    // Be conservative when the image may supply the contrast for the text.
+    if ((Math.max(ink,paper)+0.05)/(Math.min(ink,paper)+0.05)<3) return false;
+  }
+  return true;
+}
+
+function smallBackgroundTile(element) {
+  const parts = element.style.backgroundSize.trim().split(/\s+/);
+  if (!parts.length || parts.length>2) return false;
+  const small = value => {
+    const match=value?.match(/^([\d.]+)(px|%)$/);
+    return Boolean(match && Number(match[1])>0 && Number(match[1])<=(match[2]==='%'?50:160));
+  };
+  return small(parts[0]) && (parts.length===1 || parts[1]==='auto' || small(parts[1]));
+}
+
+function decorativeBackgroundKind(element) {
+  if (element.matches(DECORATION_CONTENT) || element.querySelector(DECORATION_CONTENT)) return '';
+  const text=normalizedText(element.textContent);
+  if (!text) {
+    const dimensions=['width','height'].map(name=>element.style[name].match(/^([\d.]+)px$/));
+    const semantic=['alt','title','aria-label'].some(name=>normalizedText(element.getAttribute(name))) || element.getAttribute('role')==='img';
+    return !semantic && dimensions.every(match=>match && Number(match[1])>0 && Number(match[1])<=48) ? 'empty' : '';
+  }
+  const label = /^[qa]\d{1,4}[.:：、)）]?$/i.test(text);
+  const shortHeading = /^h[1-6]$/.test(element.localName) && text.length<=40 && smallBackgroundTile(element);
+  const textureCard = text.length>=30 && /(?:^|\s)repeat(?:-[xy])?(?:\s|$)/.test(element.style.backgroundRepeat) && smallBackgroundTile(element);
+  return (label || shortHeading || textureCard) && textReadableWithoutImage(element) ? 'background' : '';
+}
+
+function clearDecorativeBackground(element) {
+  // Keep the solid background at every ancestor level: native text can inherit
+  // it as a highlight, which is essential for white labels on colored cards.
+  const solid=element.style.backgroundColor;
+  for (const property of Array.from(element.style)) if (property==='background' || property.startsWith('background-')) element.style.removeProperty(property);
+  if (solid) element.style.backgroundColor=solid;
+  element.removeAttribute('data-lazy-bgimg');
+  element.removeAttribute('data-sync-background-url');
+  if (element.getAttribute('data-sync-unsupported')==='CSS 背景图') element.removeAttribute('data-sync-unsupported');
+}
+
 function parseDocument(html, options = {}) {
   const Parser = options.document?.defaultView?.DOMParser || globalThis.DOMParser;
   if (!Parser) throw new Error('文章解析需要浏览器 DOMParser。');
@@ -222,7 +304,7 @@ export function cleanArticle(html, options = {}) {
   const document = parseDocument(html, options);
   const body = document.body;
   const warnings = [];
-  const stats = { removedLinks: 0, removedEmptyBlocks: 0, removedImagePlaceholders: 0, removedEmptySvg: 0, removedTransparentBackgrounds: 0, removedHiddenElements: removeHiddenContent(body), trimmedTail: trimTail(body) ? 1 : 0 };
+  const stats = { removedLinks: 0, removedEmptyBlocks: 0, removedImagePlaceholders: 0, removedEmptySvg: 0, removedTransparentBackgrounds: 0, removedDecorativeBackgrounds: 0, removedSmallDecorations: 0, removedHiddenElements: removeHiddenContent(body), trimmedTail: trimTail(body) ? 1 : 0 };
   if (stats.trimmedTail) warnings.push('已删除回顾／近期热门文章标题及其后面的内容。');
 
   for (let element of [...body.querySelectorAll('*')]) {
@@ -275,12 +357,16 @@ export function cleanArticle(html, options = {}) {
     }
     const backgroundValue = element.style?.backgroundImage || '';
     const lazyBackground = element.getAttribute('data-lazy-bgimg')?.trim() || '';
-    // Saved WeChat pages may still have a transparent CSS placeholder while the
-    // real authored background remains in data-lazy-bgimg. Prefer that source so
-    // saved and already-loaded pages retain the same decoration/layout.
+    // Resolve lazy metadata before classifying decoration so saved and already-
+    // loaded articles make the same content-first decision.
     const backgroundRaw = lazyBackground || backgroundValue.match(/^url\(["']?(.*?)["']?\)$/i)?.[1];
     if (backgroundRaw) {
-      if (backgroundRaw.endsWith(`;base64,${TRANSPARENT_PIXEL}`)) {
+      const decoration = decorativeBackgroundKind(element);
+      if (decoration==='empty') {
+        element.remove(); stats.removedSmallDecorations++; continue;
+      } else if (decoration==='background') {
+        clearDecorativeBackground(element); stats.removedDecorativeBackgrounds++;
+      } else if (backgroundRaw.endsWith(`;base64,${TRANSPARENT_PIXEL}`)) {
         element.style.removeProperty('background-image'); stats.removedTransparentBackgrounds++;
       } else {
         const safeBackground = safeUrl(backgroundRaw, options.sourceUrl, {image: true});
@@ -331,6 +417,7 @@ export function cleanArticle(html, options = {}) {
   }
   if (stats.removedLinks) warnings.push(`已清除 ${stats.removedLinks} 处外链（保留链接文字和图片）。`);
   if (stats.removedImagePlaceholders) warnings.push(`已清除 ${stats.removedImagePlaceholders} 个没有内容的微信图片占位标签。`);
+  if (stats.removedDecorativeBackgrounds || stats.removedSmallDecorations) warnings.push(`已略去 ${stats.removedDecorativeBackgrounds+stats.removedSmallDecorations} 处装饰背景，保留正文文字和内容图片。`);
   const localAssets = [...body.querySelectorAll('img[data-local-path]')].map(img => ({sourceUrl: img.getAttribute('src'), localPath: img.getAttribute('data-local-path')}));
   return { html: body.innerHTML.trim(), warnings, blockingIssues: getBlockingIssues(body), stats: { ...stats, ...summarize(body) }, localAssets };
 }

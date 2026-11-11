@@ -100,15 +100,15 @@ test('reports background images rather than silently losing them during style cl
   assert.match(result.blockingIssues.join(' '), /CSS 背景图/);
 });
 
-test('restores a WeChat lazy background instead of discarding its transparent CSS placeholder', () => {
+test('restores an unclassified large lazy background instead of discarding its transparent CSS placeholder', () => {
   // This MIME-mislabeled PNG placeholder is the one actually present in the
   // saved 正经玩 title decoration; its real image lives in data-lazy-bgimg.
   const placeholder = 'data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQImWNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==';
-  const result = cleanArticle(`<section data-lazy-bgimg="https://mmbiz.qpic.cn/decoration.png" style="width:20px;height:25px;margin-top:-14px;background-image:url('${placeholder}');background-size:100% 100%"><br></section>`);
+  const result = cleanArticle(`<section data-lazy-bgimg="https://mmbiz.qpic.cn/decoration.png" style="width:320px;height:200px;margin-top:-14px;background-image:url('${placeholder}');background-size:100% 100%"><br></section>`);
   const element = doc(result.html).querySelector('section');
   assert.equal(element.getAttribute('data-sync-background-url'), 'https://mmbiz.qpic.cn/decoration.png');
   assert.equal(element.style.backgroundImage, 'url("https://mmbiz.qpic.cn/decoration.png")');
-  assert.equal(element.style.height, '25px');
+  assert.equal(element.style.height, '200px');
   assert.equal(element.style.marginTop, '-14px');
   assert.equal(result.stats.backgrounds, 1);
   assert.equal(result.stats.removedTransparentBackgrounds, 0);
@@ -153,14 +153,59 @@ test('preserves corner radii and border longhands exposed by Chromium shorthand 
   assert.equal(style.left, '');
 });
 
-test('preserves horizontal and vertical background position longhands for local rendering', () => {
-  const result = cleanArticle('<section style="background-image:url(https://mmbiz.qpic.cn/decoration.png);background-position-x:50%;background-position-y:top;background-repeat:no-repeat">Q1</section>');
+test('preserves unknown background position longhands for local rendering', () => {
+  const result = cleanArticle('<section style="background-image:url(https://mmbiz.qpic.cn/decoration.png);background-position-x:50%;background-position-y:top;background-repeat:no-repeat">待保留的信息图</section>');
   const element = doc(result.html).querySelector('section');
   assert.equal(element.style.getPropertyValue('background-position-x'), '50%');
   assert.equal(element.style.getPropertyValue('background-position-y'), 'top');
   assert.equal(element.style.backgroundRepeat, 'no-repeat');
   assert.equal(element.getAttribute('data-sync-background-url'), 'https://mmbiz.qpic.cn/decoration.png');
   assert.ok(result.blockingIssues.some(issue => issue.includes('CSS 背景图')));
+});
+
+test('omits small empty title decoration while preserving real images and the editable title',()=>{
+  const result=cleanArticle('<section style="background-color:orange"><strong style="color:black">实验器材</strong><section data-lazy-bgimg="https://mmbiz.qpic.cn/ribbon.png" style="width:20px;height:25px;margin-top:-14px;background-color:orange"><br></section></section><p><img src="https://mmbiz.qpic.cn/small.gif" width="20" height="25"></p>');
+  const content=doc(result.html);
+  assert.equal(content.body.textContent,'实验器材');
+  assert.ok(content.querySelector('strong'));
+  assert.equal(content.querySelectorAll('img').length,1);
+  assert.equal(content.querySelector('section').style.backgroundColor,'orange');
+  assert.equal(result.stats.removedSmallDecorations,1);
+  assert.equal(result.stats.backgrounds,0);
+});
+
+test('question and answer label backgrounds become editable text with original emphasis and color',()=>{
+  const result=cleanArticle('<section><span style="color:#808080;font-weight:bold;background-image:url(https://mmbiz.qpic.cn/q.png);background-size:110px auto">Q127</span><b data-lazy-bgimg="https://mmbiz.qpic.cn/a.png" style="color:#333">A2：</b><h3 style="color:blue;background-image:url(https://mmbiz.qpic.cn/title.png);background-size:100px auto">实验结果</h3></section>');
+  const content=doc(result.html);
+  assert.equal(content.body.textContent,'Q127A2：实验结果');
+  assert.equal(content.querySelector('span').style.fontWeight,'bold');
+  assert.equal(content.querySelector('span').style.color,'rgb(128, 128, 128)');
+  assert.equal(content.querySelector('h3').style.color,'blue');
+  assert.equal(result.stats.removedDecorativeBackgrounds,3);
+  assert.equal(result.stats.backgrounds,0);
+  assert.deepEqual(result.blockingIssues,[]);
+});
+
+test('retains white text support from ancestor solid backgrounds and checks the nearest text color',()=>{
+  const result=cleanArticle('<section style="background-color:rgb(90,45,20);color:white"><span data-lazy-bgimg="https://mmbiz.qpic.cn/q.png">Q1</span></section><section style="color:white"><span style="color:black;background-image:url(https://mmbiz.qpic.cn/a.png)">A1</span></section><span style="color:white;background-image:url(https://mmbiz.qpic.cn/needed.png)">Q2</span>');
+  const content=doc(result.html);
+  assert.equal(result.stats.removedDecorativeBackgrounds,2);
+  assert.equal(content.querySelector('section').style.backgroundColor,'rgb(90, 45, 20)');
+  assert.equal(content.querySelector('section').style.color,'white');
+  assert.equal(content.querySelector('[data-sync-background-url]').textContent,'Q2');
+  assert.equal(result.stats.backgrounds,1);
+});
+
+test('removes proven tiled card texture but retains unknown backgrounds and content-bearing media',()=>{
+  const text='这是一段足够长的互动说明文字，所有信息都来自可以编辑的文字内容，背景只是一张重复铺满卡片的小纹理。';
+  const result=cleanArticle(`<section style="color:white;background-color:white;background-image:url(https://mmbiz.qpic.cn/tile.png);background-size:29% auto;background-repeat:repeat"><p style="color:black">${text}</p></section><section style="background-image:url(https://mmbiz.qpic.cn/infographic.png);background-size:100% auto;background-repeat:no-repeat">${text}</section><section style="background-image:url(https://mmbiz.qpic.cn/tile.png);background-size:29% auto;background-repeat:repeat">${text}<img src="https://mmbiz.qpic.cn/content.png"></section>`);
+  const content=doc(result.html);
+  assert.equal(result.stats.removedDecorativeBackgrounds,1);
+  assert.equal(result.stats.backgrounds,2);
+  assert.equal(content.querySelector('section').style.backgroundColor,'white');
+  assert.equal(content.querySelectorAll('img').length,1);
+  assert.equal(content.querySelectorAll('section')[0].textContent,text);
+  assert.equal(cleanArticle(result.html).stats.backgrounds,2);
 });
 
 test('saved article collection DOM and local image mapping are retained', () => {

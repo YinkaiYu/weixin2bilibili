@@ -1,4 +1,3 @@
-import {cleanArticle} from '/lib/article.js';
 import {prepareForNative} from '/lib/raster.js';
 
 document.getElementById('run').onclick = async () => {
@@ -11,7 +10,9 @@ document.getElementById('run').onclick = async () => {
     brush.fillStyle = '#0055ff'; brush.fillRect(0,0,20,25);
     const placeholder = 'data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQImWNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==';
     const source = `<p>正文保持原生</p><section style="text-align:center"><section style="display:inline-block;padding:0 6px;background:#fefefe"><section style="display:flex"><section style="height:35px;line-height:35px;padding:0 15px;background-color:#fcb42b;border-radius:8px"><p style="margin:0"><strong>实验器材</strong></p></section><section data-lazy-bgimg="${asset.toDataURL()}" style="width:20px;height:25px;margin-top:-14px;margin-left:3px;background-color:#fcb42b;background-size:100% 100%;background-image:url(${placeholder})"><span><br></span></section></section></section></section><p>后续文字仍可编辑</p>`;
-    const parsed = cleanArticle(source);
+    // Exercise the low-level renderer directly. Default article cleanup now
+    // removes this purely decorative accent under the content-first policy.
+    const parsed = {html:source.replace('data-lazy-bgimg=','data-sync-background-url=')};
     document.getElementById('original').innerHTML=parsed.html;
     const result = await prepareForNative(parsed.html);
     if (result.blockingIssues.length) throw new Error(result.blockingIssues.join('\n'));
