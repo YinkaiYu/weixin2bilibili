@@ -219,6 +219,7 @@
     } catch (error) {
       // A controller may report a confirmed save followed by a verification
       // error. Expose that draft and do not create another on an accidental retry.
+      if(error?.imageDiagnostic)console.warn('[IOP Import] image failure',JSON.stringify(error.imageDiagnostic));
       if (safeDraftUrl(error?.draftUrl)) {
         draftUrl = error.draftUrl;
         completed = true;

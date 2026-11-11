@@ -74,20 +74,34 @@ export async function migrateImages(html,{coverUrl='',client,cache={},cacheKey='
   for(let index=0;index<sources.length;index++){
     const src=sources[index];if(!src)throw new Error('正文包含缺少地址的图片');
     onProgress({index,total:sources.length,source:src,state:'loading'});
+    let original,stage='download';
     try{
-      const original=await downloadImage(src,{fetchImpl,localFiles,savedPaths});
+      original=await downloadImage(src,{fetchImpl,localFiles,savedPaths});
       const key=cacheKey+':'+original.hash;let uploaded=cache[key];
       if(uploaded&&!biliImageUrl(uploaded.url))uploaded=null;
       if(!uploaded){
+        stage='upload';
         uploaded=await client.uploadImage(original.blob,{filename:original.hash.slice(0,16)+'.'+original.extension});
         if(!biliImageUrl(uploaded.url))throw new Error('B站返回了非站内图片地址，已停止。');
+        stage='verify';
         if(!uploaded.animationVerified)await verifyAnimation(uploaded.url,original,{fetchImpl});
         uploaded={...uploaded,width:uploaded.width||original.width,height:uploaded.height||original.height,size:uploaded.size??original.size/1024,bytes:original.size,mime:original.mime,frames:original.frames,animated:original.animated};
         cache[key]=uploaded;await onCache(cache);
-      }else if(original.animated){await verifyAnimation(uploaded.url,original,{fetchImpl});}
+      }else if(original.animated){stage='verify';await verifyAnimation(uploaded.url,original,{fetchImpl});}
       replacements.set(src,uploaded.url);images.set(uploaded.url,uploaded);
       onProgress({index,total:sources.length,source:src,state:'done',animated:original.animated,frames:original.frames});
-    }catch(error){onProgress({index,total:sources.length,source:src,state:'error',message:error.message});throw new Error(`第 ${index+1} 张图片处理失败：${error.message}`);}
+    }catch(error){
+      const details=original?`（${original.width}×${original.height}，${original.extension.toUpperCase()}，${original.size} 字节）`:'';
+      const failure=new Error(`第 ${index+1} 张图片处理失败${details}：${error.message}`,{cause:error});
+      let source='unknown';
+      try{const url=new URL(src);source=url.protocol==='data:'?'embedded':url.origin+url.pathname;}catch{/* No unparsed source is logged. */}
+      // Local diagnostics only: never include query tokens, fragments, image bytes,
+      // authentication state or the full source article in console output.
+      failure.imageDiagnostic={index:index+1,total:sources.length,stage,source,code:error.code,
+        ...(original?{mime:original.mime,width:original.width,height:original.height,bytes:original.size,sha256:original.hash,frames:original.frames}:{})};
+      onProgress({index,total:sources.length,source:src,state:'error',message:failure.message});
+      throw failure;
+    }
   }
   for(const node of doc.querySelectorAll('img')){
     const src=node.getAttribute('src');node.setAttribute('src',replacements.get(src));

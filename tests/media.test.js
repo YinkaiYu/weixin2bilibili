@@ -117,3 +117,35 @@ test('cached animation gets checked again and changed timing blocks reuse',async
 test('upload response outside B站 CDN is never inserted into the document',async()=>{
   await assert.rejects(migrateImages(`<img src="${sourceUrl}">`,{fetchImpl:async()=>new Response(gif),client:{uploadImage:async()=>({...asset(),url:'https://evil.test/hdslb.com/a.gif'})}}),/非站内/);
 });
+
+test('upload failure reports measured image properties without exposing URL tokens or changing pixels',async()=>{
+  const url='https://mmbiz.qpic.cn/example/photo.png?token=do-not-log#private';
+  let sent;
+  await assert.rejects(migrateImages(`<img src="${url}">`,{
+    fetchImpl:async()=>new Response(png),client:{uploadImage:async file=>{
+      sent=new Uint8Array(await file.arrayBuffer());
+      throw Object.assign(new Error('请上传合适尺寸的图片'),{code:4125014});
+    }}
+  }),error=>{
+    assert.match(error.message,/1×1，PNG/);
+    assert.equal(error.imageDiagnostic.stage,'upload');
+    assert.equal(error.imageDiagnostic.code,4125014);
+    assert.equal(error.imageDiagnostic.source,'https://mmbiz.qpic.cn/example/photo.png');
+    assert.equal(error.imageDiagnostic.bytes,png.length);
+    assert.ok(!JSON.stringify(error.imageDiagnostic).includes('do-not-log'));
+    return true;
+  });
+  assert.deepEqual(sent,png,'a server size error must not trigger silent resizing');
+});
+
+test('embedded image failure diagnostics omit base64 payloads',async()=>{
+  const src='data:image/gif;base64,'+Buffer.from(gif).toString('base64');
+  await assert.rejects(migrateImages(`<img src="${src}">`,{
+    fetchImpl:async()=>new Response(gif),client:{uploadImage:async()=>{throw new Error('rejected');}}
+  }),error=>{
+    assert.equal(error.imageDiagnostic.source,'embedded');
+    assert.equal(error.imageDiagnostic.mime,'image/gif');
+    assert.ok(!JSON.stringify(error.imageDiagnostic).includes('base64'));
+    return true;
+  });
+});

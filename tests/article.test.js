@@ -141,3 +141,54 @@ test('removing a link retains its own color, bold and nested image without an ac
   assert.match(document.body.textContent,/普通链接/);
   assert.equal(result.stats.removedLinks,2);
 });
+
+test('removes explicitly hidden content before style cleanup and footer detection', () => {
+  const result = cleanArticle('<p>前文</p><div style="display:none!important"><img src="https://mmbiz.qpic.cn/tracker.png"><p>往期回顾</p></div><p hidden="false">隐藏文字</p><img hidden src="https://mmbiz.qpic.cn/hidden.png"><p aria-hidden="true">仍然可见</p><p>后文</p>');
+  assert.equal(doc(result.html).body.textContent, '前文仍然可见后文');
+  assert.equal(result.stats.images, 0);
+  assert.equal(result.stats.trimmedTail, 0);
+  assert.equal(result.stats.removedHiddenElements, 3);
+  assert.deepEqual(result.blockingIssues, []);
+});
+
+test('retains declared formula semantics from hidden carriers without exposing other hidden content', () => {
+  const result = cleanArticle('<div hidden style="color:red">隐藏文字<img src="https://mmbiz.qpic.cn/tracker.png"><b><span data-formula="x^2" style="display:none"><svg viewBox="0 0 10 10"><path d="M0 0L10 10"/></svg></span></b><span hidden data-latex="E=mc^2"></span></div><p>正文</p>');
+  const content = doc(result.html);
+  assert.deepEqual([...content.querySelectorAll('[data-formula],[data-latex]')].map(node => node.getAttribute('data-formula') || node.getAttribute('data-latex')), ['x^2', 'E=mc^2']);
+  assert.equal(content.querySelectorAll('[hidden],img').length, 0);
+  assert.equal(content.querySelector('[data-formula]').style.display, '');
+  assert.equal(content.querySelector('div').style.color, 'red');
+  assert.ok(content.querySelector('b [data-formula] svg'));
+  assert.equal(content.body.textContent, '正文');
+  assert.equal(result.stats.formulas, 2);
+  assert.deepEqual(result.blockingIssues, []);
+});
+
+test('removes empty WeChat shells with lazy metadata but preserves authored missing images', () => {
+  const result = cleanArticle('<p><img class="rich_pages wxw-img" data-index="2" data-order="0" loading="lazy" src=""><img class="wxw-img" data-loaded="false" style=""></p><p><img class="wxw-img" alt="缺失的插图"><img class="wxw-img" data-imgfileid="123"><img class="wxw-img" data-formula="x^2"><img alt="未知图片"></p>');
+  assert.equal(result.stats.removedImagePlaceholders, 2);
+  const remaining = [...doc(result.html).images];
+  assert.equal(remaining.length, 4);
+  assert.ok(remaining.some(image => image.getAttribute('alt') === '缺失的插图'));
+  assert.ok(remaining.some(image => image.getAttribute('data-formula') === 'x^2'));
+  assert.ok(result.blockingIssues.some(issue => issue.includes('没有可读取')));
+});
+
+test('only removes exact transparent pixels with WeChat placeholder evidence and no real source', () => {
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQImWNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==';
+  const gif = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  const unknownSmall = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX6kAAAAASUVORK5CYII=';
+  const result = cleanArticle(`<p><img class="wxw-img js_img_placeholder" src="${png}" data-index="1"><img class="wxw-img wx_img_placeholder" src="${gif}"></p>
+    <p><img class="wxw-img js_img_placeholder" src="${png}" data-src="https://mmbiz.qpic.cn/photo.jpg"><img class="wxw-img js_img_placeholder" src="${gif}" data-original="https://mmbiz.qpic.cn/animation.gif"></p>
+    <p><img src="${png}"><img class="wxw-img" src="${gif}"><img class="wxw-img js_img_placeholder" src="${unknownSmall}"><img class="wxw-img js_img_placeholder" alt="作者说明" src="${png}"><img class="wxw-img js_img_placeholder" src="https://mmbiz.qpic.cn/real-small.png" width="1" height="1"><img class="wxw-img js_img_placeholder" data-imgfileid="123" src="${png}"><img class="wxw-img js_img_placeholder" data-w="1080" src="${png}"></p>`);
+  const images = [...doc(result.html).images];
+  assert.equal(result.stats.removedImagePlaceholders, 2);
+  assert.equal(images.length, 9);
+  assert.equal(images[0].getAttribute('src'), 'https://mmbiz.qpic.cn/photo.jpg');
+  assert.equal(images[1].getAttribute('src'), 'https://mmbiz.qpic.cn/animation.gif');
+  assert.ok(images.some(image => image.getAttribute('src') === unknownSmall));
+  assert.ok(images.some(image => image.getAttribute('alt') === '作者说明'));
+  assert.ok(images.some(image => image.getAttribute('src') === 'https://mmbiz.qpic.cn/real-small.png'));
+  assert.ok(images.some(image => image.getAttribute('data-w') === '1080'));
+  assert.deepEqual(result.blockingIssues, []);
+});

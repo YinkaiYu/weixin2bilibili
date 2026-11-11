@@ -10,6 +10,63 @@ const SVG_ATTRS = new Set('viewbox width height x y x1 x2 y1 y2 cx cy r rx ry d 
 const MATH_ATTRS = new Set('display mathvariant mathsize mathcolor mathbackground stretchy fence separator form lspace rspace linethickness numalign denomalign rowalign columnalign rowspacing columnspacing notation open close separators encoding'.split(' '));
 const IMAGE_ATTRS = new Set('src alt title width height data-type data-formula data-latex data-w data-h data-local-path data-sync-formula-image'.split(' '));
 const TRANSPARENT_PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQImWNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==';
+const TRANSPARENT_GIF = 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+const FORMULA_SELECTOR = '[data-formula],[data-latex]';
+const IMAGE_SOURCE_ATTRS = ['src', 'data-src', 'data-original', 'data-actualsrc', 'srcset', 'data-srcset', 'data-lazy-src', 'data-url', 'data-back', 'data-croporisrc'];
+const EMPTY_IMAGE_METADATA = new Set(['class', 'data-index', 'data-order', 'data-lazy', 'data-loaded', 'data-status', 'data-state', 'data-lazyloaded', 'data-load-status', 'loading', 'decoding', 'fetchpriority']);
+
+function removeHiddenContent(body) {
+  let removed = 0;
+  // Inspect explicit HTML visibility before sanitizing attributes or cutting the
+  // footer. Otherwise a hidden tracking image/heading can become visible content.
+  for (const element of [body, ...body.querySelectorAll('*')]) {
+    if (element !== body && !body.contains(element)) continue;
+    if (!element.hasAttribute('hidden') && element.style?.display.toLowerCase() !== 'none') continue;
+    if (element.matches(FORMULA_SELECTOR) || element.querySelector(FORMULA_SELECTOR)) {
+      // A declared LaTeX source is semantic content, even when its source carrier
+      // is hidden. Keep only formula branches and their styling ancestors; do not
+      // expose unrelated hidden text, images, or fallback markup alongside them.
+      const retainFormulaBranches = parent => {
+        if (parent.matches(FORMULA_SELECTOR)) return;
+        for (const child of [...parent.childNodes]) {
+          if (child.nodeType === 1 && (child.matches(FORMULA_SELECTOR) || child.querySelector(FORMULA_SELECTOR))) retainFormulaBranches(child);
+          else child.remove();
+        }
+      };
+      retainFormulaBranches(element);
+      element.removeAttribute('hidden');
+      element.style?.removeProperty('display');
+    } else {
+      if (element === body) element.replaceChildren(); else element.remove();
+      removed++;
+    }
+  }
+  return removed;
+}
+
+function knownTransparentImage(value) {
+  const match = String(value || '').trim().match(/^data:image\/(png|gif);base64,([a-z\d+/=\s]+)$/i);
+  if (!match) return false;
+  const bytes = match[2].replace(/\s/g, '');
+  return bytes === (match[1].toLowerCase() === 'png' ? TRANSPARENT_PIXEL : TRANSPARENT_GIF);
+}
+
+function isEmptyWeChatImage(element) {
+  if (!/\bwxw-img\b/.test(element.className || '')) return false;
+  if (element.matches(FORMULA_SELECTOR) || ['latex'].includes(element.getAttribute('data-type')) || element.getAttribute('type') === 'latex') return false;
+  if (['alt', 'title'].some(name => normalizedText(element.getAttribute(name)))) return false;
+  // A known original asset or a larger declared intrinsic size signals authored
+  // content whose lazy URL may be temporarily missing, not an empty editor shell.
+  if (['data-imgfileid', 'data-fileid'].some(name => normalizedText(element.getAttribute(name))) || ['data-w', 'data-h'].some(name => Number(element.getAttribute(name)) > 1)) return false;
+  const sources = IMAGE_SOURCE_ATTRS.map(name => element.getAttribute(name)?.trim()).filter(Boolean);
+  if (sources.length) {
+    // Exact verified transparent bytes plus explicit WeChat placeholder classes.
+    // A real lazy source, unknown tiny image, or unmarked data URI is never guessed
+    // away. In particular, prefer a data-src photograph over its transparent src.
+    return /\b(?:js_img_placeholder|wx_img_placeholder)\b/.test(element.className || '') && sources.every(knownTransparentImage);
+  }
+  return [...element.attributes].every(attr => EMPTY_IMAGE_METADATA.has(attr.name) || IMAGE_SOURCE_ATTRS.includes(attr.name) || (['alt', 'title', 'style'].includes(attr.name) && !attr.value.trim()));
+}
 
 function parseDocument(html, options = {}) {
   const Parser = options.document?.defaultView?.DOMParser || globalThis.DOMParser;
@@ -119,8 +176,6 @@ function sanitizeStyle(element) {
       continue;
     }
     if (!STYLE_PROPS.has(property) || /url\s*\(|expression\s*\(|@import|javascript:|behavior:|var\s*\(/i.test(value)) continue;
-    // Hidden tracking/decoration is not article content. Do not carry hidden nodes forward.
-    if (property === 'display' && value === 'none') continue;
     element.style.setProperty(property, value);
   }
   if (!element.getAttribute('style')) element.removeAttribute('style');
@@ -158,7 +213,7 @@ export function cleanArticle(html, options = {}) {
   const document = parseDocument(html, options);
   const body = document.body;
   const warnings = [];
-  const stats = { removedLinks: 0, removedEmptyBlocks: 0, removedImagePlaceholders: 0, removedEmptySvg: 0, removedTransparentBackgrounds: 0, trimmedTail: trimTail(body) ? 1 : 0 };
+  const stats = { removedLinks: 0, removedEmptyBlocks: 0, removedImagePlaceholders: 0, removedEmptySvg: 0, removedTransparentBackgrounds: 0, removedHiddenElements: removeHiddenContent(body), trimmedTail: trimTail(body) ? 1 : 0 };
   if (stats.trimmedTail) warnings.push('已删除回顾／近期热门文章标题及其后面的内容。');
 
   for (let element of [...body.querySelectorAll('*')]) {
@@ -194,9 +249,9 @@ export function cleanArticle(html, options = {}) {
       continue;
     }
     if (tag === 'img') {
-      // WeChat's editor leaves empty <img class="rich_pages wxw-img"> shells.
-      // Only remove that exact known placeholder: an authored image with a failed URL remains a blocker.
-      if (/\bwxw-img\b/.test(element.className || '') && [...element.attributes].every(attr => attr.name === 'class')) {
+      // WeChat may attach lazy-loader metadata to its otherwise empty shells.
+      // Authored or unknown images with a failed URL remain blockers.
+      if (isEmptyWeChatImage(element)) {
         element.remove(); stats.removedImagePlaceholders++; continue;
       }
       const savedPath = localAssetPath(element.getAttribute('src'));
