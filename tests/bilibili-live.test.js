@@ -55,9 +55,13 @@ function reconstruct(){
   }
   assert.ok(whiteText.length>0,'历史源输入含有白底文字');
   for(const text of whiteText){const span=doc.createElement('span');span.style.backgroundColor='#ffffff';text.replaceWith(span);span.append(text);}
+  // Freeze the historical ordinary-image path: that saved draft predates
+  // native emote mapping. Its emoji paragraph was deliberately rasterized.
+  const historicalEmoji=doc.querySelector('img[src*="Yellowdog.png"]');
+  historicalEmoji.src='https://mmbiz.qpic.cn/historical-system-emote.png';
   const targets=findRasterTargets(doc);
   assert.equal(targets.length,1);
-  assert.ok(targets[0].querySelector('img[src*="Yellowdog.png"]'));
+  assert.ok(targets[0].contains(historicalEmoji));
   const fallback=doc.createElement('p');fallback.innerHTML='<img src="https://i0.hdslb.com/bfs/mock/raster.png">';
   targets[0].replaceWith(fallback);
   // No saved request/upload-cache export exists. Only upload identities and

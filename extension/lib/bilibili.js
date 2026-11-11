@@ -87,6 +87,7 @@ function validateContent(content,sourceLinks=[]) {
   for (const para of content.paragraphs) {
     if(para.link_card)throw new BilibiliError('正文含未确认的链接卡片，已停止保存。');
     for (const node of para.text?.nodes || []) {
+      if(node.node_type===2 && (typeof node.emote?.raw_text!=='string'||!/^\[[^\[\]\r\n]{1,80}\]$/.test(node.emote.raw_text)))throw new BilibiliError('正文含无效的原生表情，已停止保存。');
       if(node.link||node.node_type===4||node.node_type===3){
         const url=normalizeSourceLink(node.link?.link);
         if(node.node_type!==4||node.link?.link_type!==16||!url||!allowedSources.has(url)||typeof node.link.show_text!=='string'||!node.link.show_text.trim()) {
@@ -197,6 +198,7 @@ function canonicalContent(content) {
         return {type: 1, text: word.words ?? '', font: Number(word.font_size || 17), level: word.font_level || 'regular', colors: paletteColor(word),
           style: ['bold', 'italic', 'underline', 'strikethrough'].map(key => !!word.style?.[key]), background: backgroundStyle(word.bg_style)};
       }
+      if (node.node_type === 2) return {type:2,text:node.emote?.raw_text||'',background:backgroundStyle(node.emote?.bg_style)};
       if (node.node_type === 4) return canonicalSourceLink(node);
       if (node.node_type === 5) return {type: 5, latex: node.formula?.latex_content || ''};
       return stable(node);

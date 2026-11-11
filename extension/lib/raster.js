@@ -1,6 +1,7 @@
 /** Loss-aware, local-only rendering for the few blocks Bilibili cannot represent. */
 import {downloadImage} from './media.js';
 import {analyzeNativeTextBackgrounds,getCompositePageBackground} from './opus.js';
+import {wechatEmote} from './emotes.js';
 
 const BLOCK = new Set('P DIV SECTION ARTICLE MAIN HEADER FOOTER H1 H2 H3 H4 H5 H6 BLOCKQUOTE FIGURE FIGCAPTION UL OL LI PRE HR'.split(' '));
 const WIDTH = 680;
@@ -78,7 +79,7 @@ export function findRasterTargets(input) {
       candidates.add(decoratedHeadingTarget(element,body) || (!BLOCK.has(tag) && isLeafTextBlock(paragraph) ? paragraph : element));
       continue;
     }
-    if (hasFormula(element)) continue;
+    if (hasFormula(element) || wechatEmote(element)) continue;
     if (tag === 'TABLE') { candidates.add(element); continue; }
     if (tag === 'SVG' || tag === 'MATH') {
       const paragraph = nearestBlock(element, body);

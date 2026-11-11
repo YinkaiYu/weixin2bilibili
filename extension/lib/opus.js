@@ -4,6 +4,7 @@
  * This module never downloads content, uploads, or publishes anything.
  */
 import {normalizeSourceLink} from './source-links.js';
+import {wechatEmote} from './emotes.js';
 
 const BLOCK = new Set(['P', 'DIV', 'SECTION', 'ARTICLE', 'MAIN', 'HEADER', 'FOOTER', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'FIGURE', 'FIGCAPTION', 'UL', 'OL', 'LI', 'PRE', 'HR']);
 const UNSUPPORTED = new Set(['SVG', 'MATH', 'TABLE', 'VIDEO', 'AUDIO', 'IFRAME', 'CANVAS', 'OBJECT', 'EMBED']);
@@ -362,7 +363,7 @@ export function toOpus(html, { images = new Map(), document: owner, sourceLinkVa
   const paragraphs = [], warnings = [], blockingIssues = [], notices = [], sourceLinks = new Set(), requestedSourceLinks = new Set();
   const acceptedSourceLinks = new Set((sourceLinkValidation?.accepted || []).map(normalizeSourceLink).filter(Boolean));
   const rejectedSourceLinks = new Set((sourceLinkValidation?.rejected || []).map(normalizeSourceLink).filter(Boolean));
-  const stats = { paragraphs: 0, images: 0, formulaImages: 0, formulas: 0, superscripts: 0, subscripts: 0, characters: 0 };
+  const stats = { paragraphs: 0, images: 0, emotes: 0, formulaImages: 0, formulas: 0, superscripts: 0, subscripts: 0, characters: 0 };
   const summaryParts = [];
   let listCounter = 0;
   const adjustedSizes = new Set();
@@ -677,6 +678,14 @@ export function toOpus(html, { images = new Map(), document: owner, sourceLinkVa
         return;
       }
       if (node.tagName === 'IMG') {
+        const rawText=wechatEmote(node);
+        if(rawText){
+          const emote={raw_text:rawText},background=wordNode('',childStyle).word.bg_style;
+          if(background)emote.bg_style=background;
+          nodes.push({node_type:2,emote});stats.emotes++;
+          summaryParts.push(rawText);stats.characters+=rawText.length;
+          return;
+        }
         flush();
         const blockDisplay = ['block', 'flex'].includes(node.style.display);
         pushImage(node, hasVisibleText && !hasBlockChildren && !blockDisplay);
@@ -743,6 +752,7 @@ export function toOpus(html, { images = new Map(), document: owner, sourceLinkVa
     warn(`${details.join('；')}。实际字号、字重和段间距由 B 站控制。`);
   }
   stats.paragraphs = paragraphs.length;
+  if(stats.emotes)inform(`已将 ${stats.emotes} 个微信系统表情转换为 B站原生表情。`);
   if (!paragraphs.length) issue('正文没有可同步的内容。');
   return { content: { paragraphs }, warnings, notices, sourceLinks:[...sourceLinks], requestedSourceLinks:[...requestedSourceLinks], blockingIssues, stats, summary: summaryParts.join('').replace(/\s+/g, ' ').trim().slice(0, 250) };
 }

@@ -1,6 +1,7 @@
 /** Byte-preserving image handling: never draw GIFs onto canvas. */
 import {inspectGif,normalizeBiliImageUrl} from './bilibili.js';
 import {resolveLocalFile} from './local-files.js';
+import {wechatEmote} from './emotes.js';
 const IMAGE_HOSTS = ['qpic.cn','qlogo.cn','hdslb.com','biliimg.com'];
 export function allowedImageUrl(value) {
   if (/^data:image\/(png|jpeg|gif|webp);base64,/i.test(value)) return true;
@@ -69,7 +70,8 @@ export async function verifyAnimation(uploadedUrl,source,{fetchImpl=fetch}={}){
 }
 export async function migrateImages(html,{coverUrl='',client,cache={},cacheKey='',localFiles=new Map(),savedPaths=new Map(),fetchImpl=fetch,onProgress=()=>{},onCache=()=>{}}){
   const doc=new DOMParser().parseFromString(html,'text/html');
-  const sources=[...new Set([...doc.querySelectorAll('img')].map(n=>n.getAttribute('src')).concat(coverUrl||[]))];
+  const mediaNodes=[...doc.querySelectorAll('img')].filter(node=>!wechatEmote(node));
+  const sources=[...new Set(mediaNodes.map(n=>n.getAttribute('src')).concat(coverUrl||[]))];
   const replacements=new Map(),images=new Map();
   for(let index=0;index<sources.length;index++){
     const src=sources[index];if(!src)throw new Error('正文包含缺少地址的图片');
@@ -103,7 +105,7 @@ export async function migrateImages(html,{coverUrl='',client,cache={},cacheKey='
       throw failure;
     }
   }
-  for(const node of doc.querySelectorAll('img')){
+  for(const node of mediaNodes){
     const src=node.getAttribute('src');node.setAttribute('src',replacements.get(src));
     for(const attr of [...node.attributes])if(/^(?:data-src|srcset|data-back|data-original|data-url|data-srcset)$/i.test(attr.name))node.removeAttribute(attr.name);
   }

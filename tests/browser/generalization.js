@@ -12,6 +12,12 @@ document.querySelector('#run').onclick=async()=>{
   status.textContent='正在运行';status.dataset.done='false';examples.replaceChildren();
   const results=[];
   try{
+    const emoteSource=cleanArticle('<p>文字前<img src="https://res.wx.qq.com/t/wx_fed/we-emoji/res/assets/newemoji/Yellowdog.png" style="display:inline-block;width:1em">文字后</p>');
+    const preparedEmote=await prepareForNative(emoteSource.html,{downloadImageImpl:()=>{throw new Error('原生表情不应下载');}});
+    const nativeEmote=toOpus(preparedEmote.html,{document});
+    assert(preparedEmote.rasterized===0&&!nativeEmote.blockingIssues.length,'原生表情无需截图或图片上传');
+    assert(JSON.stringify(nativeEmote.content.paragraphs[0].text.nodes.map(n=>n.emote?.raw_text||n.word?.words))===JSON.stringify(['文字前','[doge]','文字后']),'表情与前后文字保持同一段落顺序');
+    results.push('通过：微信狗头转为原生表情，整段文字保持可编辑');
     for(const [title,color,size] of [['量子材料的新线索','#173f8a',23],['另一篇文章的标题','#24633a',28],['A new topic','#7a2855',19]]){
       const cleaned=cleanArticle(`<h2 style="color:white;background:${color};font-size:${size}px">${title}</h2><p>正文继续保留。</p>`);
       const prepared=await prepareForNative(cleaned.html);

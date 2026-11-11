@@ -6,6 +6,7 @@ import {indexLocalFiles} from './local-files.js';
 import {createBridgeClient,bridgeFetch} from './bridge.js';
 import {classifyImportMessages,noticeFields,importFailure} from './import-notices.js';
 import {matchCollection} from './bilibili.js';
+import {wechatEmote} from './emotes.js';
 
 async function hashText(text){const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));return [...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0')).join('');}
 async function loadSource(url){
@@ -15,7 +16,7 @@ async function loadSource(url){
 }
 function preflight(html){
   const doc=new DOMParser().parseFromString(html,'text/html'),images=new Map();
-  [...doc.querySelectorAll('img')].forEach((img,i)=>{const url=`https://i0.hdslb.com/bfs/new_dyn/preflight-${i}.png`;img.src=url;images.set(url,{url,width:Number(img.getAttribute('data-w')||img.width)||640,height:Number(img.getAttribute('data-h')||img.height)||480,size:1});});
+  [...doc.querySelectorAll('img')].filter(img=>!wechatEmote(img)).forEach((img,i)=>{const url=`https://i0.hdslb.com/bfs/new_dyn/preflight-${i}.png`;img.src=url;images.set(url,{url,width:Number(img.getAttribute('data-w')||img.width)||640,height:Number(img.getAttribute('data-h')||img.height)||480,size:1});});
   return toOpus(doc.body.innerHTML,{images});
 }
 function chooseCollection(names,collections,title=''){

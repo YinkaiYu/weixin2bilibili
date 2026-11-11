@@ -1,5 +1,6 @@
 import {parseArticle} from '/lib/article.js';
 import {findRasterTargets} from '/lib/raster.js';
+import {wechatEmote} from '/lib/emotes.js';
 import {toOpus} from '/lib/opus.js';
 
 document.querySelector('#run').onclick=async()=>{
@@ -22,7 +23,7 @@ document.querySelector('#run').onclick=async()=>{
         img.src=`https://i0.hdslb.com/bfs/mock/raster-${index}.png`;p.append(img);target.replaceWith(p);
       }
       const images=new Map();
-      for(const [index,img]of [...doc.images].entries()){
+      for(const [index,img]of [...doc.images].filter(image=>!wechatEmote(image)).entries()){
         const url=`https://i0.hdslb.com/bfs/mock/image-${index}.png`;
         img.src=url;images.set(url,{width:680,height:320,size:80});
       }

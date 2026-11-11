@@ -71,6 +71,7 @@ API 基址为 `https://api.bilibili.com`。会话与 `bili_jct` CSRF cookie 由�
 | 代码块 | `{para_type:8, code:{lang,content}}` |
 | 标题 | `para_type:9`，`format.heading_type:1/2/3`，`text.nodes` |
 | 文字节点 | `{node_type:1, word:{words,font_size,font_level,color,dark_color,style,...}}` |
+| 原生表情节点 | `{node_type:2, emote:{raw_text:"[doge]",bg_style?}}` |
 | 来源链接节点 | `{node_type:4, link:{show_text,link,link_type:16,...}}` |
 | 行内公式节点 | `{node_type:5, formula:{latex_content}}` |
 
@@ -89,6 +90,23 @@ API 基址为 `https://api.bilibili.com`。会话与 `bili_jct` CSRF cookie 由�
 文字节点没有原生 `sup/sub` 字段。转换器将相邻字母基底与上下标组合为 LaTeX 节点，保留同段位置、粗斜、下划线和可表示的颜色。已有 `data-formula` / `data-latex` 只读取最外层源码，不重复转换内层 SVG。
 
 公式颜色只能使用可表示为 TeX 颜色的值；CSS `rgba(...)` 不能直接放入 `\color{...}`。背景、水平删除线等不能准确表达的公式样式会产生 `blockingIssues`。不存在已确认的通用行内位图节点；位图与文字混排由局部渲染路径处理。
+
+### 原生表情
+
+2026-11-12 核对上述官方构建的 `createEmoteNode`（902281）、`encodeEmojiToRawText`（904648）、`convertEmoteNodeToContent`（944874 附近），并在原生编辑器中检查表情选单及生成的 DOM。写入 `node_type:2` 和 `emote.raw_text`；读取器还支持与文字相同格式的 `bg_style`。原生 DOM 使用 `img[data-type="emoji"]`，`alt` 为方括号名称，图片由 B站表情库解析。
+
+映射依据图案与含义，不能只按两边名称匹配。当前支持下列微信官方行内资源（基址为 `https://res.wx.qq.com/t/wx_fed/we-emoji/res/assets/newemoji/`）：
+
+| 微信资源 / 含义 | B站原生代码 |
+| --- | --- |
+| `Yellowdog.png` / 旺柴、狗头 | `[doge]` |
+| `Lol.png` / 笑哭 | `[喜极而泣]` |
+| `2_05.png` / 捂脸 | `[笑哭]` |
+| `Wow.png` / 哇、星星眼 | `[星星眼]` |
+
+微信素材逐项读取官方图片核对；B站原生编辑器中已核对笑哭与捂脸的对应图案。B站 `[喜极而泣]` 图片为 `/bfs/emote/485a7e0c01c2d70707daae53bee4a9e2e31ef1ed.png`，`[笑哭]` 为 `/bfs/emote/c3043ba94babf824dea03ce500d0e73763bf4f40.png`。这些 B站图像地址只用于协议取证，不在转换器中固定。
+
+识别要求官方域名和完整目录、明确映射的资源名及行内尺寸（不超过 2em 或 40px）。图注、图表、公式、代码、叠层与大幅展示图不走表情替换。Unicode 表情保持原文字；没有确认对应关系的图片继续普通媒体处理。原生表情跳过局部截图、预检图片替换及上传，保存核验检查其名称、出现顺序和底纹。模拟导入测试覆盖完整请求数据；本次未用新版扩展重新保存整篇真实文章。
 
 ### 图片和注释
 

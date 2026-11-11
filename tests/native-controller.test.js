@@ -96,6 +96,21 @@ test('native import uses real parsing/conversion, uploads PNG once for body and 
   }finally{app.close();}
 });
 
+test('native system emotes remain inline through preflight, migration, save and readback without image uploads',async()=>{
+  const emotes=['Yellowdog','Lol','2_05','Wow'].map(id=>`<img src="https://res.wx.qq.com/t/wx_fed/we-emoji/res/assets/newemoji/${id}.png" style="width:1em;display:inline-block">`).join('后文');
+  const sourceHtml=articleHtml().replace('<h2>往期回顾</h2>',`<p>原生表情${emotes}结束</p><h2>往期回顾</h2>`);
+  const app=setup({sourceHtml});try{
+    const result=await runImport({sourceUrl});
+    assert.equal(result.verified,true);assert.equal(app.uploads.length,1,'only the ordinary picture/shared cover is uploaded');
+    assert.equal(app.apiCalls.some(call=>call.url.includes('we-emoji')),false,'system emotes require no download or raster');
+    const paragraphs=app.savedPayloads[0].arg.opus.content.paragraphs;
+    const paragraph=paragraphs.find(p=>p.text?.nodes.some(n=>n.emote));
+    assert.deepEqual(paragraph.text.nodes.map(n=>n.word?.words||n.emote?.raw_text),['原生表情','[doge]','后文','[喜极而泣]','后文','[笑哭]','后文','[星星眼]','结束']);
+    assert.equal(paragraphs.filter(p=>p.pic).length,1);
+    assert.ok(result.info.some(message=>message.includes('4 个微信系统表情')));
+  }finally{app.close();}
+});
+
 test('saved pictures use actual upload metadata in source order, including repeats, without preflight placeholders',async()=>{
   // Two complete PNGs with different pixels and dimensions. Expected metadata
   // comes from the simulated upload responses, never from the converted output.

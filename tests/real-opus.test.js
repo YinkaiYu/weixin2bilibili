@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 import { parseArticle } from '../extension/lib/article.js';
 import { findRasterTargets } from '../extension/lib/raster.js';
+import {wechatEmote} from '../extension/lib/emotes.js';
 import { toOpus } from '../extension/lib/opus.js';
 
 const directory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '测试文章');
@@ -17,7 +18,7 @@ const cases = [
   { name: '遍地开花的拼豆店，卖的竟是“诺奖物理”？（内附物理所拼豆图纸）.html', raster: 0, images: 26, formulas: 18, captions: 12 },
   { name: '不抽血不拍片，闻一闻就能接收身体警报？？？.html', tail: 'fu福li利shi时jian间', raster: 0, images: 3, formulas: 0, captions: 1 },
   { name: '为什么只睡20分钟，下午就能精神满满？_ No. 537.html', tail: '投票', raster: 8, images: 15, formulas: 14, captions: 0 },
-  { name: '你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html', tail: '上期回顾', raster: 1, images: 16, formulas: 11, captions: 4 },
+  { name: '你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html', tail: '上期回顾', raster: 0, images: 15, emotes: ['[doge]'], formulas: 11, captions: 4 },
   { name: '摸了半天找不到头，胶带却记得你撕到哪儿？.html', raster: 0, images: 12, formulas: 4, captions: 9 },
   { name: '要宣布翻篇了？那我磁化损失呢，厉娜.html', raster: 0, images: 21, formulas: 0, captions: 19 },
 ];
@@ -73,6 +74,8 @@ for (const sample of cases) {
     assertText(compact(doc.body.textContent),baseline.text,'cleanup is compared with the original DOM, not with its own output');
     assert.deepEqual(formulaSources(doc.body),baseline.formulas);
     assert.deepEqual(scriptSources(doc.body),baseline.scripts);
+    const expectedEmoteSources=sample.emotes?baseline.images.filter(url=>url.endsWith('#imgIndex=23')):[];
+    assert.equal(expectedEmoteSources.length,sample.emotes?.length||0);
     const targets = findRasterTargets(doc);
     assert.equal(targets.length, sample.raster);
     if (sample.name.includes('胶带')) {
@@ -108,7 +111,7 @@ for (const sample of cases) {
     assert.equal(doc.querySelectorAll('[data-sync-background-url]').length, 0);
     const imageMap = new Map();
     const uploaded=new Map();
-    for (const [index, img] of [...doc.images].entries()) {
+    for (const [index, img] of [...doc.images].filter(image=>!wechatEmote(image)).entries()) {
       const animated = img.getAttribute('data-type') === 'gif' || img.src.includes('wx_fmt=gif');
       const url = `https://i0.hdslb.com/bfs/mock/image-${index}.${animated ? 'gif' : 'png'}`;
       const capture=captures.find(item=>item.url===img.src);
@@ -118,16 +121,17 @@ for (const sample of cases) {
     }
     const result = toOpus(doc.body.innerHTML, { document, images: imageMap });
     assert.deepEqual(result.blockingIssues, []);
-    assert.equal(result.stats.images,baseline.images.length-captures.reduce((sum,item)=>sum+item.images.length,0)+targets.length);
+    assert.equal(result.stats.images,baseline.images.length-expectedEmoteSources.length-captures.reduce((sum,item)=>sum+item.images.length,0)+targets.length);
     assert.equal(result.stats.images, sample.images);
     assert.equal(result.stats.formulas, sample.formulas);
+    assert.deepEqual(result.content.paragraphs.flatMap(p=>p.text?.nodes||[]).filter(n=>n.node_type===2).map(n=>n.emote.raw_text),sample.emotes||[]);
     const pictures = result.content.paragraphs.flatMap(p => p.pic?.pics || []);
-    assert.deepEqual(pictures.flatMap(picture=>{assert.ok(uploaded.has(picture.url));return uploaded.get(picture.url).images;}),baseline.images,'expanding each mock raster recovers the original image order and identities');
+    assert.deepEqual(pictures.flatMap(picture=>{assert.ok(uploaded.has(picture.url));return uploaded.get(picture.url).images;}),baseline.images.filter(url=>!expectedEmoteSources.includes(url)),'expanding each mock raster recovers the original image order and identities');
     assert.equal(pictures.filter(p => p.comment).length, sample.captions);
     const withoutCaptions = new document.defaultView.DOMParser().parseFromString(doc.body.innerHTML, 'text/html');
     for (const [index, picture] of pictures.entries()) {
       if (!picture.comment) continue;
-      const caption = withoutCaptions.images[index].closest('figure')?.querySelector('figcaption');
+      const caption = [...withoutCaptions.images].filter(image=>!wechatEmote(image))[index].closest('figure')?.querySelector('figcaption');
       assert.ok(caption, '每条原生图片注释必须来自同一张源图片的 figcaption');
       assert.equal(picture.comment, caption.textContent.replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').trim());
       assert.ok(picture.comment.length <= 100, '图注不能超过原生编辑器限制');
