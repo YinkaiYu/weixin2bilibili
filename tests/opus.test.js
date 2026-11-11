@@ -78,6 +78,71 @@ test('preserves images in original order without changing GIF metadata or size u
   assert.equal(r.stats.images, 1);
 });
 
+test('maps wrapped figure captions to each native picture without duplicate body text', () => {
+  const r = convert(`<section style="background-color:white"><p>前文</p><figure><section><p><span><img src="${image}"></span></p></section><figcaption style="font-size:14px;color:#888;text-align:center">图一：实验装置</figcaption></figure><figure><img src="${image}"><figcaption>图二：实验结果</figcaption></figure><p>后文</p></section>`);
+  assert.deepEqual(r.blockingIssues, []);
+  assert.deepEqual(r.content.paragraphs.map(p => p.para_type), [1, 2, 2, 1]);
+  assert.deepEqual(r.content.paragraphs.filter(p => p.pic).map(p => p.pic.pics[0].comment), ['图一：实验装置', '图二：实验结果']);
+  assert.equal(words(r).map(w => w.words).join(''), '前文后文');
+  assert.equal(r.summary, '前文图一：实验装置图二：实验结果后文');
+  assert.equal(r.stats.characters, r.summary.length);
+  assert.equal(r.stats.images, 2);
+});
+
+test('uses visible caption over old image metadata and treats captions as plain text', () => {
+  const r = convert(`<figure><img src="${image}" data-caption="旧说明"><figcaption>\u200b 图 A &amp; B <span>说明</span><br>第二行 <span>&lt;标签&gt;</span></figcaption></figure>`);
+  assert.deepEqual(r.blockingIssues, []);
+  assert.equal(r.content.paragraphs.length, 1);
+  assert.equal(r.content.paragraphs[0].pic.pics[0].comment, '图 A & B 说明 第二行 <标签>');
+  assert.deepEqual(r.warnings, []);
+});
+
+test('keeps emphasized or colored captions as native body text with formatting intact', () => {
+  const r = convert(`<figure><img src="${image}"><figcaption style="color:#888"><strong>重点</strong><span style="color:#ff0000">红字</span><u>下划线</u></figcaption></figure><section style="color:#124578"><figure><img src="${image}"><figcaption>继承彩色</figcaption></figure></section>`);
+  assert.deepEqual(r.blockingIssues, []);
+  assert.deepEqual(r.content.paragraphs.map(p => p.para_type), [2, 1, 2, 1]);
+  assert.ok(r.content.paragraphs.filter(p => p.pic).every(p => !p.pic.pics[0].comment));
+  const w = words(r);
+  assert.equal(w[0].style.bold, true);
+  assert.equal(w[1].color, '#ff0000');
+  assert.equal(w[2].style.underline, true);
+  assert.equal(w[3].color, '#124578');
+  assert.ok(r.warnings.some(warning => warning.includes('含强调样式或彩色文字')));
+});
+
+test('uses native captions for the ordinary warm and cool gray source templates', () => {
+  const r = convert(`<figure><img src="${image}"><figcaption style="color:rgb(134,122,114)">暖灰图注</figcaption></figure><figure><img src="${image}"><figcaption style="color:rgb(107,117,113)">冷灰图注</figcaption></figure>`);
+  assert.deepEqual(r.blockingIssues, []);
+  assert.deepEqual(r.content.paragraphs.map(p => p.pic.pics[0].comment), ['暖灰图注', '冷灰图注']);
+});
+
+test('retains long and semantic captions as complete body text instead of clipping or flattening them', () => {
+  const long = '注'.repeat(101);
+  const r = convert(`<figure><img src="${image}" data-caption="${long}"><figcaption>${long}</figcaption></figure><figure><img src="${image}"><figcaption>面积 m<sup>2</sup>，能量<span data-formula="E=mc^2"><svg></svg></span></figcaption></figure>`);
+  assert.deepEqual(r.blockingIssues, []);
+  assert.deepEqual(r.content.paragraphs.map(p => p.para_type), [2, 1, 2, 1]);
+  assert.ok(r.content.paragraphs.filter(p => p.pic).every(p => !p.pic.pics[0].comment));
+  assert.equal(words(r)[0].words, long);
+  assert.deepEqual(formulas(r), ['\\text{m}^{\\text{2}}', 'E=mc^2']);
+  assert.ok(r.warnings.some(w => w.includes('100 字符')));
+  assert.ok(r.warnings.some(w => w.includes('丢失含义')));
+});
+
+test('supports the native 100-code-unit caption boundary without truncating data captions', () => {
+  const r = convert(`<img src="${image}" data-caption="${'字'.repeat(100)}"><img src="${image}" data-caption="${'😀'.repeat(51)}">`);
+  assert.deepEqual(r.blockingIssues, []);
+  assert.equal(r.content.paragraphs[0].pic.pics[0].comment.length, 100);
+  assert.equal(r.content.paragraphs[1].pic.pics[0].comment, undefined);
+  assert.equal(words(r)[0].words, '😀'.repeat(51));
+});
+
+test('does not attach a group caption to the wrong picture or consume an orphan caption', () => {
+  const r = convert(`<figure><img src="${image}"><img src="${image}"><figcaption>两图对比</figcaption></figure><figcaption>独立说明</figcaption>`);
+  assert.deepEqual(r.blockingIssues, []);
+  assert.ok(r.content.paragraphs.filter(p => p.pic).every(p => !p.pic.pics[0].comment));
+  assert.equal(words(r).map(w => w.words).join(''), '两图对比独立说明');
+});
+
 test('uses outer formula metadata and does not duplicate SVG or nested formulas', () => {
   const r = convert('<p>其中<span data-formula="E=mc^2"><span data-formula="E=mc^2"><svg><path d="M1 1"></path></svg></span></span>成立。</p>');
   assert.deepEqual(r.blockingIssues, []);

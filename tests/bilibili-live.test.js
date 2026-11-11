@@ -29,6 +29,12 @@ function reconstruct(){
   const article=parseArticle(historicalSource.serialize(),{document});
   const draft=JSON.parse(fs.readFileSync(draftPath,'utf8'));
   const doc=new document.defaultView.DOMParser().parseFromString(article.html,'text/html');
+  // This historical response also predates caption association. Restore the
+  // original paragraph wrappers inside the newly generated figures/captions so
+  // this fixture continues checking its original transport, not new behavior.
+  assert.equal(doc.querySelectorAll('figcaption').length,4);
+  for(const caption of [...doc.querySelectorAll('figcaption')])caption.replaceWith(...caption.childNodes);
+  for(const figure of [...doc.querySelectorAll('figure')])figure.replaceWith(...figure.childNodes);
   const targets=findRasterTargets(doc);
   assert.equal(targets.length,1);
   assert.ok(targets[0].querySelector('img[src*="Yellowdog.png"]'));

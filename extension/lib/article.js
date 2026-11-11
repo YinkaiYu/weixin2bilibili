@@ -1,5 +1,5 @@
 /** Article extraction and loss-aware cleanup. No requests or page scripts are executed. */
-const HTML_TAGS = new Set('p div section article main header footer span strong b em i u s strike del sup sub br hr img h1 h2 h3 h4 h5 h6 ul ol li blockquote pre code table thead tbody tfoot tr td th caption colgroup col'.split(' '));
+const HTML_TAGS = new Set('p div section article main header footer figure figcaption span strong b em i u s strike del sup sub br hr img h1 h2 h3 h4 h5 h6 ul ol li blockquote pre code table thead tbody tfoot tr td th caption colgroup col'.split(' '));
 const SVG_TAGS = new Set('svg g path rect circle ellipse line polyline polygon text tspan defs clippath mask lineargradient radialgradient stop title desc'.split(' '));
 const MATH_TAGS = new Set('math mrow mi mn mo mtext mspace ms mfrac msqrt mroot msub msup msubsup munder mover munderover mtable mtr mtd mfenced menclose semantics annotation'.split(' '));
 const UNSUPPORTED_MEDIA = new Set('iframe video audio canvas object embed mpvoice qqmusic mp-common-videosnap mp-common-mpaudio mp-common-profile mp-common-product'.split(' '));
@@ -17,7 +17,7 @@ STYLE_PROPS.add('background-position-x');
 STYLE_PROPS.add('background-position-y');
 const SVG_ATTRS = new Set('viewbox width height x y x1 x2 y1 y2 cx cy r rx ry d points fill fill-opacity stroke stroke-width stroke-linecap stroke-linejoin stroke-opacity opacity transform font-size font-family text-anchor dominant-baseline dx dy offset stop-color stop-opacity preserveaspectratio'.split(' '));
 const MATH_ATTRS = new Set('display mathvariant mathsize mathcolor mathbackground stretchy fence separator form lspace rspace linethickness numalign denomalign rowalign columnalign rowspacing columnspacing notation open close separators encoding'.split(' '));
-const IMAGE_ATTRS = new Set('src alt title width height data-type data-formula data-latex data-w data-h data-local-path data-sync-formula-image'.split(' '));
+const IMAGE_ATTRS = new Set('src alt title width height data-type data-formula data-latex data-w data-h data-local-path data-sync-formula-image data-caption'.split(' '));
 const TRANSPARENT_PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQImWNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==';
 const TRANSPARENT_GIF = 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 const FORMULA_SELECTOR = '[data-formula],[data-latex]';
@@ -159,6 +159,132 @@ function clearDecorativeBackground(element) {
   if (element.getAttribute('data-sync-unsupported')==='CSS 背景图') element.removeAttribute('data-sync-unsupported');
 }
 
+const CAPTION_BLOCKS = new Set('P DIV SECTION ARTICLE MAIN HEADER FOOTER H1 H2 H3 H4 H5 H6 BLOCKQUOTE FIGURE FIGCAPTION UL OL LI PRE HR'.split(' '));
+const CAPTION_BLOCK_SELECTOR = [...CAPTION_BLOCKS].join(',');
+
+function captionTextStyle(node) {
+  const ancestors=[];
+  for (let element=node.nodeType===1?node:node.parentElement;element;element=element.parentElement) ancestors.unshift(element);
+  let size=17,color='',align='',weight='normal',fontStyle='normal',decoration='',background='';
+  for (const element of ancestors) {
+    if (element.style?.color && element.style.color!=='inherit') color=element.style.color;
+    if (element.style?.textAlign) align=element.style.textAlign;
+    const font=element.style?.fontSize.match(/^([\d.]+)(px|pt|em|rem|%)$/);
+    if (font) {const n=Number(font[1]);size=font[2]==='px'?n:font[2]==='pt'?n*4/3:font[2]==='%'?size*n/100:font[2]==='em'?size*n:17*n;}
+    if (['B','STRONG'].includes(element.tagName)) weight='bold';
+    if (['I','EM'].includes(element.tagName)) fontStyle='italic';
+    if (element.tagName==='U') decoration+=' underline';
+    if (['S','STRIKE','DEL'].includes(element.tagName)) decoration+=' line-through';
+    if (element.style?.fontWeight && element.style.fontWeight!=='inherit') weight=element.style.fontWeight;
+    if (element.style?.fontStyle && element.style.fontStyle!=='inherit') fontStyle=element.style.fontStyle;
+    const ownDecoration=element.style?.textDecorationLine || element.style?.textDecoration;
+    if (ownDecoration && ownDecoration!=='none' && ownDecoration!=='inherit') decoration+=` ${ownDecoration}`;
+    const ownBackground=element.style?.backgroundColor;
+    if (ownBackground && ownBackground!=='transparent' && (cssColor(ownBackground)?.[3]??1)>0) background=ownBackground;
+  }
+  return {size,color,align,weight,fontStyle,decoration:decoration.trim(),background};
+}
+
+function captionTextNodes(node) {
+  if (node.nodeType===3) return normalizedText(node.textContent)?[node]:[];
+  const walker=node.ownerDocument.createTreeWalker(node,4), nodes=[];
+  while(walker.nextNode()) if(normalizedText(walker.currentNode.textContent)) nodes.push(walker.currentNode);
+  return nodes;
+}
+
+function captionCandidate(node) {
+  const text=String(node.textContent||'').trim();
+  if (!text || normalizedText(text).length>300 || /^(?:by\s|作者\s*[:：]|译者\s*[:：]|编辑\s*[:：]|校对\s*[:：]|审核\s*[:：]|参考文献|参考资料|免责声明|版权声明)/i.test(text)) return false;
+  if (node.nodeType===1) {
+    const forbidden='img,svg,math,table,figure,figcaption,h1,h2,h3,h4,h5,h6,pre,code,blockquote,ul,ol,li,hr,[data-formula],[data-latex],[data-sync-unsupported]';
+    if(node.matches(forbidden)||node.querySelector(forbidden)) return false;
+  }
+  return captionTextNodes(node).every(textNode=>{
+    const style=captionTextStyle(textNode),color=cssColor(style.color);
+    if (!color || style.size>15 || style.size<9 || color[3]<0.7) return false;
+    const channels=color.slice(0,3), mean=channels.reduce((a,b)=>a+b,0)/3;
+    return mean>=90 && mean<=190 && Math.max(...channels)-Math.min(...channels)<=40;
+  });
+}
+
+function meaningfulCaptionNode(node) {
+  if(node.nodeType===3) return Boolean(normalizedText(node.textContent));
+  return node.nodeType===1 && (normalizedText(node.textContent)||node.matches('img,svg,math,hr,figure')||node.querySelector('img,svg,math,hr,figure'));
+}
+
+function nextCaptionNode(node,body,previous=false) {
+  while(node&&node!==body) {
+    let sibling=previous?node.previousSibling:node.nextSibling;
+    while(sibling&&!meaningfulCaptionNode(sibling)) sibling=previous?sibling.previousSibling:sibling.nextSibling;
+    if(sibling) return sibling;
+    node=node.parentNode;
+  }
+  return null;
+}
+
+function firstCaptionCandidate(node) {
+  while(node) {
+    // A following section can contain a caption and several body paragraphs.
+    // Move only its first standalone leaf block, never the whole section or a
+    // grey inline prefix from an otherwise ordinary paragraph.
+    const hasBlocks=node.nodeType===1 && node.querySelector(CAPTION_BLOCK_SELECTOR);
+    if(!hasBlocks) return captionCandidate(node)?node:null;
+    if(node.nodeType!==1 || node.matches('img,svg,math,table,figure,figcaption,h1,h2,h3,h4,h5,h6,pre,code,blockquote,ul,ol,li,hr')) return null;
+    const first=[...node.childNodes].find(meaningfulCaptionNode);
+    if(first?.nodeType!==1 || !CAPTION_BLOCKS.has(first.tagName) && !first.querySelector(CAPTION_BLOCK_SELECTOR)) return null;
+    node=first;
+  }
+  return null;
+}
+
+function associateImageCaptions(body) {
+  let associated=0,ambiguous=0;
+  for(const image of [...body.querySelectorAll('img')]) {
+    if(image.closest(FORMULA_SELECTOR) || image.hasAttribute('data-caption') || image.closest('figure')?.querySelector('figcaption')) continue;
+    let container=image.parentElement;
+    while(container!==body&&!CAPTION_BLOCKS.has(container.tagName)) container=container.parentElement;
+    // A multi-image paragraph is a group. Never assign its shared description to
+    // whichever image happens to be last, or insert a figure inside a paragraph.
+    const hasChildBlocks=[...container.children].some(child=>CAPTION_BLOCKS.has(child.tagName));
+    if(container!==body && !hasChildBlocks && container.querySelectorAll('img').length!==1) continue;
+    if(normalizedText(container.textContent)&&!hasChildBlocks) continue;
+    let anchor=image;
+    while(anchor.parentElement!==body && anchor.parentElement && !normalizedText(anchor.parentElement.textContent) && anchor.parentElement.querySelectorAll('img').length===1 && !anchor.parentElement.querySelector('svg,math,hr')) anchor=anchor.parentElement;
+    const caption=firstCaptionCandidate(nextCaptionNode(anchor,body));
+    if(!caption) continue;
+    const validParent=element=>element===body || ['DIV','SECTION','ARTICLE','MAIN','HEADER','FOOTER','LI','BLOCKQUOTE','FIGURE'].includes(element.tagName);
+    // Some saved pages put the image block and caption inside one styling span.
+    // Lift the complete one-image/one-caption pair, retaining the span, rather
+    // than inserting an invalid figure inside an inline element or paragraph.
+    while(!validParent(anchor.parentElement) && anchor.parentElement.querySelectorAll('img').length===1 && normalizedText(anchor.parentElement.textContent)===normalizedText(caption.textContent) && !anchor.parentElement.querySelector('svg,math,hr,[data-formula],[data-latex]')) anchor=anchor.parentElement;
+    if(!validParent(anchor.parentElement)) continue;
+    const previous=nextCaptionNode(anchor,body,true);
+    if(/上图|下图|两张图|两幅图|两图/.test(caption.textContent) && previous?.nodeType===1 && !normalizedText(previous.textContent) && (previous.matches('img')||previous.querySelector('img'))) {ambiguous++;continue;}
+    // Carry the style context outside the moved node; its own complete markup
+    // stays intact, including relative sizes and bold/sub/sup fallback content.
+    const inherited=captionTextStyle(caption.parentElement), oldParent=caption.parentElement;
+    const figure=anchor.tagName==='FIGURE'?anchor:body.ownerDocument.createElement('figure');
+    if(figure!==anchor){anchor.before(figure);figure.append(anchor);}
+    const figcaption=body.ownerDocument.createElement('figcaption');
+    figcaption.style.color=inherited.color || 'black';
+    figcaption.style.fontSize=`${inherited.size}px`;
+    figcaption.style.fontWeight=inherited.weight;
+    figcaption.style.fontStyle=inherited.fontStyle;
+    if(inherited.decoration)figcaption.style.textDecoration=inherited.decoration;
+    if(inherited.background)figcaption.style.backgroundColor=inherited.background;
+    if(inherited.align)figcaption.style.textAlign=inherited.align;
+    figcaption.append(caption);
+    figure.append(figcaption);
+    // Avoid leaving wrappers that a second cleanup would remove differently.
+    let empty=oldParent;
+    while(empty!==body && empty!==figure && EMPTY_BLOCKS.has(empty.localName) && !meaningfulCaptionNode(empty) && !empty.querySelector('[data-formula],[data-latex],[data-sync-unsupported],[data-sync-background-url]')) {
+      const parent=empty.parentElement; empty.remove(); empty=parent;
+    }
+    associated++;
+  }
+  return {associated,ambiguous};
+}
+
 function parseDocument(html, options = {}) {
   const Parser = options.document?.defaultView?.DOMParser || globalThis.DOMParser;
   if (!Parser) throw new Error('文章解析需要浏览器 DOMParser。');
@@ -282,6 +408,7 @@ function summarize(body) {
     backgrounds: body.querySelectorAll('[data-sync-background-url]').length,
     superscripts: body.querySelectorAll('sup').length,
     subscripts: body.querySelectorAll('sub').length,
+    captions: body.querySelectorAll('figure > figcaption').length,
   };
 }
 
@@ -415,6 +542,9 @@ export function cleanArticle(html, options = {}) {
     while (previous?.nodeType === 3 && !normalizedText(previous.textContent)) previous = previous.previousSibling;
     if (previous?.nodeType === 1 && previous.localName === 'br') { br.remove(); stats.removedEmptyBlocks++; }
   }
+  const captions=associateImageCaptions(body);
+  if(captions.associated) warnings.push(`已将 ${captions.associated} 处图片下方的灰色小字识别为图注。`);
+  if(captions.ambiguous) warnings.push('有图注同时描述前面的多张图片，已保留为正文，避免关联到错误图片。');
   if (stats.removedLinks) warnings.push(`已清除 ${stats.removedLinks} 处外链（保留链接文字和图片）。`);
   if (stats.removedImagePlaceholders) warnings.push(`已清除 ${stats.removedImagePlaceholders} 个没有内容的微信图片占位标签。`);
   if (stats.removedDecorativeBackgrounds || stats.removedSmallDecorations) warnings.push(`已略去 ${stats.removedDecorativeBackgrounds+stats.removedSmallDecorations} 处装饰背景，保留正文文字和内容图片。`);

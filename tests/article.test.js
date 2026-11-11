@@ -300,3 +300,81 @@ test('only removes exact transparent pixels with WeChat placeholder evidence and
   assert.ok(images.some(image => image.getAttribute('data-w') === '1080'));
   assert.deepEqual(result.blockingIssues, []);
 });
+
+test('associates a following small gray caption with its image and preserves caption markup', () => {
+  const result=cleanArticle('<section><p><img data-src="https://mmbiz.qpic.cn/demo.gif?wx_fmt=gif" data-type="gif"></p><p style="font-size:14px;color:#888;text-align:center">图1：<strong>演示</strong> H<sub>2</sub>O 与 x<sup>2</sup></p><p>正文继续</p></section>');
+  const content=doc(result.html), figure=content.querySelector('figure');
+  assert.equal(result.stats.captions,1);
+  assert.equal(result.stats.gifs,1);
+  assert.equal(figure.querySelector('img').getAttribute('src'),'https://mmbiz.qpic.cn/demo.gif?wx_fmt=gif');
+  assert.equal(figure.querySelector('figcaption > p').textContent,'图1：演示 H2O 与 x2');
+  assert.ok(figure.querySelector('figcaption strong'));
+  assert.ok(figure.querySelector('figcaption sub'));
+  assert.ok(figure.querySelector('figcaption sup'));
+  assert.equal(content.querySelector('figure + p').textContent,'正文继续');
+  assert.equal(cleanArticle(result.html).html,result.html);
+});
+
+test('only moves the first caption leaf from a section that also contains gray body text', () => {
+  const result=cleanArticle('<p><img src="https://mmbiz.qpic.cn/a.png"></p><section style="color:#888;font-size:14px"><p>图1：说明</p><p>接下来是正文</p></section>');
+  const content=doc(result.html);
+  assert.equal(content.querySelector('figcaption').textContent,'图1：说明');
+  assert.equal(content.querySelector('figure + section').textContent,'接下来是正文');
+  assert.equal(content.querySelectorAll('figcaption p').length,1);
+  assert.equal(cleanArticle(result.html).html,result.html);
+});
+
+test('moving a caption preserves inherited emphasis, highlight and relative font sizes', () => {
+  const result=cleanArticle('<p><img src="https://mmbiz.qpic.cn/a.png"></p><section style="color:#888;font-size:14px;font-weight:700;font-style:italic;background-color:yellow;text-decoration:underline"><p style="font-size:.9em">图：继承样式</p><p style="color:black">正文</p></section>');
+  const caption=doc(result.html).querySelector('figcaption');
+  assert.equal(caption.style.color,'rgb(136, 136, 136)');
+  assert.equal(caption.style.fontSize,'14px');
+  assert.equal(caption.style.fontWeight,'700');
+  assert.equal(caption.style.fontStyle,'italic');
+  assert.equal(caption.style.backgroundColor,'yellow');
+  assert.equal(caption.style.textDecoration,'underline');
+  assert.equal(caption.querySelector('p').style.fontSize,'0.9em');
+});
+
+test('does not misassociate body text, a gray inline prefix, headings or credits as captions', () => {
+  const candidates=[
+    '<p style="font-size:14px;color:#888">灰色开头<span style="color:black">接着正文</span></p>',
+    '<p>普通正文</p><p style="font-size:14px;color:#888">后面的灰字</p>',
+    '<h3 style="font-size:14px;color:#888">灰色标题</h3>',
+    '<p style="font-size:16px;color:#888">普通字号正文</p>',
+    '<p style="font-size:14px;color:red">激光有危险</p>',
+    '<p style="font-size:14px;color:#888">编辑：小编</p>',
+    '<p style="font-size:14px;color:#888">免责声明：请勿模仿</p>',
+  ];
+  for(const candidate of candidates) assert.equal(cleanArticle(`<p><img src="https://mmbiz.qpic.cn/a.png"></p>${candidate}`).stats.captions,0,candidate);
+  assert.equal(cleanArticle('<p>行内表情<img src="https://mmbiz.qpic.cn/emoji.png"></p><p style="font-size:14px;color:#888">后面的灰字</p>').stats.captions,0);
+});
+
+test('retains a shared caption beneath two images as body rather than choosing an arbitrary image', () => {
+  const result=cleanArticle('<p><img src="https://mmbiz.qpic.cn/a.png"></p><p><img src="https://mmbiz.qpic.cn/b.png"></p><p style="font-size:14px;color:#888">上图和下图分别表示实验的两个阶段。</p>');
+  assert.equal(result.stats.captions,0);
+  assert.match(doc(result.html).body.textContent,/上图和下图/);
+  assert.ok(result.warnings.some(warning=>warning.includes('多张图片')));
+  const group=cleanArticle('<p><img src="https://mmbiz.qpic.cn/a.png"><img src="https://mmbiz.qpic.cn/b.png"></p><p style="font-size:14px;color:#888">实验装置</p>');
+  assert.equal(group.stats.captions,0);
+  assert.equal(doc(group.html).querySelectorAll('figure').length,0);
+  assert.equal(cleanArticle(group.html).html,group.html);
+});
+
+test('preserves explicit figure captions and image data-caption without creating duplicate associations', () => {
+  const result=cleanArticle('<figure><p><img src="https://mmbiz.qpic.cn/a.png"></p><figcaption><p style="font-size:14px;color:#888">已有注释</p></figcaption></figure><p><img src="https://mmbiz.qpic.cn/b.png" data-caption="原生注释"></p><p style="font-size:14px;color:#888">独立灰字</p>');
+  const content=doc(result.html);
+  assert.equal(result.stats.captions,1);
+  assert.equal(content.querySelectorAll('figure').length,1);
+  assert.equal(content.querySelector('[data-caption]').getAttribute('data-caption'),'原生注释');
+  assert.equal(cleanArticle(result.html).html,result.html);
+});
+
+test('recognizes independent captioned images in a shared section and lifts one-image styling spans safely', () => {
+  const result=cleanArticle('<section><p>正文</p><span><span><img src="https://mmbiz.qpic.cn/a.png"></span></span><p style="font-size:14px;color:#888">图1：说明</p><p>中间正文</p><span><img src="https://mmbiz.qpic.cn/b.png"></span><p style="font-size:14px;color:#888">图2：说明</p></section><section><span style="font-size:14px;color:#888"><section><img src="https://mmbiz.qpic.cn/c.png"></section><span>图3：说明</span></span></section>');
+  const content=doc(result.html);
+  assert.equal(result.stats.captions,3);
+  assert.deepEqual([...content.querySelectorAll('figcaption')].map(node=>node.textContent),['图1：说明','图2：说明','图3：说明']);
+  assert.equal(content.querySelectorAll('p > figure,span > figure').length,0);
+  assert.equal(cleanArticle(result.html).html,result.html);
+});

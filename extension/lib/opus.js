@@ -11,6 +11,9 @@ const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE', 'LINK', 'META']
 // only 13/small and 17/regular; the other three levels belong to whole headings.
 const HEADINGS = [{ size: 24, level: 'xxLarge' }, { size: 22, level: 'xLarge' }, { size: 20, level: 'large' }];
 const HTML_HEADING_SIZES = [24, 22, 20, 18, 16, 14];
+// Official CaptionManager and normalizeImageCaption use String.slice(0, 100).
+// Keep longer text as a paragraph instead of allowing native editing to cut it.
+const IMAGE_CAPTION_MAX_LENGTH = 100;
 
 function colorValue(value) {
   const v = String(value || '').trim();
@@ -136,6 +139,64 @@ export function toOpus(html, { images = new Map(), document: owner } = {}) {
   const issue = message => { if (!blockingIssues.includes(message)) blockingIssues.push(message); };
   const warn = message => { if (!warnings.includes(message)) warnings.push(message); };
   const lookupImage = url => images instanceof Map ? images.get(url) : images[url];
+  const imageCaptions = new Map(), consumedCaptions = new Set();
+
+  function captionText(node) {
+    if (node.nodeType === 3) return node.textContent;
+    if (node.nodeType !== 1 || SKIP.has(node.tagName)) return '';
+    if (node.tagName === 'BR') return '\n';
+    const text = Array.from(node.childNodes).map(captionText).join('');
+    return BLOCK.has(node.tagName) ? `\n${text}\n` : text;
+  }
+  const normalizedCaption = value => String(value || '').replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').trim();
+  function neutralCaptionColor(value) {
+    if (!value || /^(?:black|gray|grey|darkgray|darkgrey|dimgray|dimgrey|lightgray|lightgrey|silver)$/i.test(value)) return true;
+    const hex = value.match(/^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i);
+    const rgba = value.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)$/i);
+    const channels = hex ? hex.slice(1).map(v => parseInt(v, 16)) : rgba ? rgba.slice(1, 4).map(Number) : null;
+    if (!channels || (rgba?.[4] !== undefined && Number(rgba[4]) < 0.7)) return false;
+    const range = Math.max(...channels) - Math.min(...channels), mean = channels.reduce((a, b) => a + b, 0) / 3;
+    // Match the parser's ordinary gray-caption classification, including the
+    // muted warm/cool grays used by the supplied article templates.
+    return (range === 0 && mean < 255) || (range <= 40 && mean >= 90 && mean <= 190);
+  }
+  function hasCaptionFormatting(el) {
+    const ancestors = [];
+    for (let parent = el.parentElement; parent; parent = parent.parentElement) ancestors.unshift(parent);
+    const inherited = ancestors.reduce((style, parent) => stylesFor(parent, style), {});
+    const visit = (node, carry) => {
+      const background = carry.background && !/^(?:#ffffff|white)$/i.test(carry.background);
+      if (node.nodeType === 3) return Boolean(node.textContent.trim()) && Boolean(carry.bold || carry.italic || carry.underline || carry.strikethrough || background || !neutralCaptionColor(carry.color));
+      if (node.nodeType !== 1) return false;
+      const style = stylesFor(node, carry);
+      return Array.from(node.childNodes).some(child => visit(child, style));
+    };
+    return visit(el, inherited);
+  }
+  for (const figure of doc.querySelectorAll('figure')) {
+    const captions = Array.from(figure.querySelectorAll('figcaption')).filter(el => el.closest('figure') === figure);
+    const pictures = Array.from(figure.querySelectorAll('img')).filter(el => el.closest('figure') === figure && explicitLatex(el) === null);
+    // A group caption has no verified one-to-one native image association.
+    if (captions.length !== 1 || pictures.length !== 1) continue;
+    const caption = captions[0], text = normalizedCaption(captionText(caption));
+    if (!text) continue;
+    const descendants = [caption, ...caption.querySelectorAll('*')];
+    const complex = descendants.some(el => explicitLatex(el) !== null || UNSUPPORTED.has(el.tagName) ||
+      ['IMG', 'SUP', 'SUB'].includes(el.tagName) || ['super', 'sub'].includes(el.style.verticalAlign) ||
+      el.hasAttribute('data-wb-unsupported') || el.hasAttribute('data-sync-unsupported'));
+    if (complex || text.length > IMAGE_CAPTION_MAX_LENGTH) {
+      imageCaptions.set(pictures[0], null);
+      warn(complex ? '含公式、上下标或复杂内容的图注已保留为图片下方正文，避免转为纯文字后丢失含义。' : '超过 100 字符的图注已完整保留为图片下方正文，避免 B 站原生图片注释截断。');
+      continue;
+    }
+    if (hasCaptionFormatting(caption)) {
+      imageCaptions.set(pictures[0], null);
+      warn('含强调样式或彩色文字的图注已保留为图片下方正文，避免 B 站原生纯文字图注丢失加粗、颜色或装饰。');
+      continue;
+    }
+    imageCaptions.set(pictures[0], text);
+    consumedCaptions.add(caption);
+  }
 
   function checkScriptStyle(style) {
     if (style.color && !safeLatexColor(style.color)) issue('上下标或其基底的半透明、特殊颜色无法表示为有效 LaTeX 颜色，请将这个局部保留为图片或调整颜色。');
@@ -190,9 +251,15 @@ export function toOpus(html, { images = new Map(), document: owner } = {}) {
     if (!(width > 0) || !(height > 0) || rawSize === null || rawSize === '' || !Number.isFinite(size) || size < 0) issue('部分图片缺少有效尺寸或文件大小，无法生成可靠的 B 站图片节点。');
     if (inline) issue('存在没有 LaTeX 源码的行内图片。B 站原生图片节点只支持独立段落，无法在不改变位置的情况下直接同步；请将该公式补充为 LaTeX，或明确改为独立图片段落。');
     const picture = { url, width: width > 0 ? width : 0, height: height > 0 ? height : 0, size: Number.isFinite(size) ? size : 0 };
-    const caption = el.getAttribute('data-caption');
-    if (caption) picture.comment = caption;
+    const caption = imageCaptions.has(el) ? imageCaptions.get(el) : normalizedCaption(el.getAttribute('data-caption'));
+    if (caption && caption.length <= IMAGE_CAPTION_MAX_LENGTH) picture.comment = caption;
     paragraphs.push({ para_type: 2, pic: { pics: [picture], style: 0 } });
+    if (caption && caption.length > IMAGE_CAPTION_MAX_LENGTH) {
+      pushText([wordNode(caption, {})], {}, el, {});
+      summaryParts.push(caption);
+      stats.characters += caption.length;
+      warn('超过 100 字符的图注已完整保留为图片下方正文，避免 B 站原生图片注释截断。');
+    }
   }
 
   function subSup(el, inherited, nodes) {
@@ -258,7 +325,8 @@ export function toOpus(html, { images = new Map(), document: owner } = {}) {
     let nodes = [];
     const flush = () => { pushText(nodes, style, container, context); nodes = []; };
     // Used only to distinguish a paragraph image from a genuine inline picture.
-    const hasVisibleText = (container.textContent || '').trim().length > 0;
+    const visibleText = node => consumedCaptions.has(node) ? '' : node.nodeType === 3 ? node.textContent : Array.from(node.childNodes || []).map(visibleText).join('');
+    const hasVisibleText = visibleText(container).trim().length > 0;
     const hasBlockChildren = Array.from(container.children || []).some(c => BLOCK.has(c.tagName));
 
     function inline(node, parentStyle) {
@@ -274,6 +342,12 @@ export function toOpus(html, { images = new Map(), document: owner } = {}) {
         return;
       }
       if (node.nodeType !== 1 || SKIP.has(node.tagName)) return;
+      if (consumedCaptions.has(node)) {
+        const text = normalizedCaption(captionText(node));
+        summaryParts.push(text);
+        stats.characters += text.length;
+        return;
+      }
       const childStyle = stylesFor(node, parentStyle);
       if (childStyle.align === 'justify') warn('B 站原生段落没有已验证的两端对齐值，将使用默认对齐；文字内容保留。');
       const latex = explicitLatex(node);

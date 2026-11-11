@@ -71,6 +71,35 @@ test('readback catches image loss, style loss, formula changes, and lost setting
   for (const mutate of mutations) { const draft = clone(good); mutate(draft); assert.equal(verifyDraft(payload, draft).ok, false); }
 });
 
+test('native picture captions survive payload and readback and detect missing, changed or swapped captions', () => {
+  const input = clone(options);
+  const first = input.content.paragraphs[1].pic.pics[0];
+  first.comment = '第一幅图的说明';
+  input.content.paragraphs.push({para_type: 2, pic: {pics: [{...first, url: imageUrl.replace('example', 'second'), comment: '第二幅图的说明'}]}});
+  const payload = buildDraftPayload(input), good = makeDraft(payload);
+  assert.equal(payload.arg.opus.content.paragraphs[1].pic.pics[0].comment, first.comment);
+  assert.equal(verifyDraft(payload, good).ok, true);
+  const mutations = [
+    draft => delete draft.opus.content.paragraphs[1].pic.pics[0].comment,
+    draft => draft.opus.content.paragraphs[1].pic.pics[0].comment = '第一幅图',
+    draft => { const pics = draft.opus.content.paragraphs.filter(p => p.pic).map(p => p.pic.pics[0]); [pics[0].comment, pics[1].comment] = [pics[1].comment, pics[0].comment]; },
+  ];
+  for (const mutate of mutations) {
+    const draft = clone(good); mutate(draft);
+    const result = verifyDraft(payload, draft);
+    assert.equal(result.ok, false);
+    assert.ok(result.issues.some(issue => issue.includes('图片注释发生变化')));
+  }
+});
+
+test('refuses a caption the native editor would truncate or cannot represent as plain text', () => {
+  for (const comment of ['字'.repeat(101), '😀'.repeat(51), {text: '说明'}]) {
+    const input = clone(options);
+    input.content.paragraphs[1].pic.pics[0].comment = comment;
+    assert.throws(() => buildDraftPayload(input), /图片注释/);
+  }
+});
+
 test('GIF parser counts structural frames and refuses corrupt/truncated data', () => {
   assert.equal(inspectGif(gif1).frames, 1);
   assert.equal(inspectGif(twoFrameGif()).frames, 2);

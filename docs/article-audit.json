@@ -3,6 +3,7 @@
   "verification": "Local HTML parsing only. Page scripts were not executed; no external requests were made. Bilibili save/readback is a separate integration check.",
   "localAssetResolution": "Match sourceUrl to selected File using localPath relative to the saved HTML folder. data-src remains the original remote URL; localasset:/// + encodeURIComponent(localPath) is used only when no remote image source exists. Read image bytes and substitute an object/data URL for preview, then upload original bytes. Do not infer resource mapping by filename alone.",
   "backgroundExtraction": "Content-first cleanup resolves WeChat lazy background metadata before classification. Small empty decorations up to 48×48px are omitted; question/answer labels and short headings with proven small tiles retain native editable text. Text-only cards with explicit small repeated texture omit only the image layer when effective text colors remain readable against retained solid backgrounds. Unknown or potentially informative backgrounds remain marked for local rendering. In these five private samples, the 20×25px 正经玩 decoration, all Q1–Q12 backgrounds, and the 翻译专栏 interaction-card texture are omitted; source content images, formulas, superscripts, subscripts, bold and text colors remain.",
+  "captionExtraction": "Recognizes only the immediately following standalone text leaf with effective 9–15px type and muted gray color (mean RGB 90–190, channel spread at most 40). Retains the complete caption node and inherited semantic styling inside figure/figcaption; existing captions are preserved. Does not cross body paragraphs, choose a single image within a same-paragraph image group, move entire multi-paragraph sections, or absorb heading/credit/disclaimer blocks. The shared upper/lower-image caption in the translation sample stays body text. Bilibili native comment eligibility, the 100-character limit and formatting fallback are checked separately by the native converter.",
   "articles": [
     {
       "file": "不抽血不拍片，闻一闻就能接收身体警报？？？.html",
@@ -31,11 +32,12 @@
         "formulas": 0,
         "backgrounds": 0,
         "superscripts": 0,
-        "subscripts": 0
+        "subscripts": 0,
+        "captions": 1
       },
       "formatting": {
         "boldNodes": 67,
-        "coloredNodes": 162,
+        "coloredNodes": 163,
         "colors": [
           "rgb(172, 57, 255)",
           "rgb(249, 110, 87)",
@@ -56,9 +58,17 @@
         ],
         "formulas": []
       },
+      "captions": [
+        {
+          "imageIndex": 2,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJWCLH0O0dQtTyEd7rFwoBL0wmtDXjPUWS66rbonN7ZIjVNMFwA6iaMjcoamCXEo2LYmjZLeyAXlVgicibDiblhMib2t6Iz14Xtg8cSA/640?wx_fmt=png&from=appmsg#imgIndex=2",
+          "text": "乔伊・米恩发现，她的丈夫以及其他帕金森病患者身上会散发出一种独特气味。米恩如今是曼彻斯特大学一支研究团队的成员，该团队正在开发用于诊断这种疾病的相关检测方法。 图源：曼彻斯特大学"
+        }
+      ],
       "blockingIssues": [],
       "warnings": [
         "已删除回顾／近期热门文章标题及其后面的内容。",
+        "已将 1 处图片下方的灰色小字识别为图注。",
         "已清除 1 处外链（保留链接文字和图片）。",
         "已略去 1 处装饰背景，保留正文文字和内容图片。"
       ],
@@ -92,11 +102,12 @@
         "formulas": 7,
         "backgrounds": 0,
         "superscripts": 19,
-        "subscripts": 0
+        "subscripts": 0,
+        "captions": 4
       },
       "formatting": {
         "boldNodes": 174,
-        "coloredNodes": 333,
+        "coloredNodes": 337,
         "colors": [
           "rgb(62, 62, 62)",
           "rgba(0, 0, 0, 0.9)",
@@ -118,9 +129,32 @@
           "\\theta"
         ]
       },
+      "captions": [
+        {
+          "imageIndex": 2,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJUgrKxz2nY2PJicQsr19Lk0sBufMybv1FjzSEiaRq3Te52nRgRMADK7LACVQ6TlLbo94okwk5pLgUx6ps5zDjibST6jOaRo8ff8T0/640?wx_fmt=webp&from=appmsg#imgIndex=2",
+          "text": "图 1：地线没接好与接好后的对比，定性示意。"
+        },
+        {
+          "imageIndex": 3,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJUXlxg0kTblPoY94KBgBaUy8ZnJ3Bg6an1DkXtPlQ6xiaicMWd2zumI1ibQoBxRRHBUlicv0EV203hMnrBUdicciaZTdKNqdcjGxE3Qk/640?wx_fmt=webp&from=appmsg#imgIndex=3",
+          "text": "图 2: 把冰箱画成电路后的样子"
+        },
+        {
+          "imageIndex": 6,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJVwD2oGfoBiaLuib6JyorGbib6AOyAsFhJktpSnibwMo2icuLRibmsHu8AvAXsoITxIibm7B8ib9hSJvtelW1rZQtmKSjNC863JG44jkbU/640?wx_fmt=webp&from=appmsg#imgIndex=7",
+          "text": "图：左格从上方看，枕木在实地上等间距，每条视线与画面相交的地方就是画上的位置；右格是纸上画出来的样子，枕木越远越密。定性示意，非真实比例。"
+        },
+        {
+          "imageIndex": 8,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJUwMNGKIQOJNfeaIf0JtxxoFrWzib97baDMpa6PuiaNYNwuwoHeiarXcoU38uZWvFIReSTtU0CicZT8RaTYWyvZXibJRlFfVujnhNMc/640?wx_fmt=webp&from=appmsg#imgIndex=9",
+          "text": "火箭发射时，地面上看到的火箭云是怎么形成的？  | No. 536"
+        }
+      ],
       "blockingIssues": [],
       "warnings": [
         "已删除回顾／近期热门文章标题及其后面的内容。",
+        "已将 3 处图片下方的灰色小字识别为图注。",
         "已清除 12 处外链（保留链接文字和图片）。",
         "已清除 1 个没有内容的微信图片占位标签。",
         "已略去 12 处装饰背景，保留正文文字和内容图片。"
@@ -161,13 +195,15 @@
         "formulas": 4,
         "backgrounds": 0,
         "superscripts": 0,
-        "subscripts": 7
+        "subscripts": 7,
+        "captions": 4
       },
       "formatting": {
         "boldNodes": 38,
-        "coloredNodes": 47,
+        "coloredNodes": 51,
         "colors": [
           "rgb(0, 128, 255)",
+          "black",
           "rgb(62, 62, 62)",
           "rgb(136, 136, 136)",
           "rgb(34, 34, 34)",
@@ -182,9 +218,32 @@
           "[\nd\\approx\n\\frac{R\\lambda}{S\\cos^2\\theta}\n]"
         ]
       },
+      "captions": [
+        {
+          "imageIndex": 0,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJWD5u0keIaibzDjAP2Du8FA6Iu3sdzTGazMuX9jYmml6icPkiaheepEzWVdgOFZ4sk7aCnibnoHmYupvaIZ3g1lpicX6BncKY4QOEy8/640?wx_fmt=jpeg&from=appmsg#imgIndex=0",
+          "text": "↑试图用肉眼看清手机屏幕像素的小编"
+        },
+        {
+          "imageIndex": 3,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_gif/Q5JJsLWYMJVSgw7tGT5BpicdK3OHPnDN7NVOOzYgUoCVPFCGWX4hbibxdrcajanPfajLKicpxibAibtxWIkNo4JjUaBQ3sq127IpW8iceI7cxmvec/640?wx_fmt=gif&from=appmsg#imgIndex=7",
+          "text": "书籍是人类进步的阶梯（物理意义）"
+        },
+        {
+          "imageIndex": 12,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJV9RkYNJ5mqdAYCWyC5jygptbjwIHB9D0IV7KcdWXqzoCLVwPFNTSBK1HYqRedAiag9T8icibL7PlSQMeIMYmZgrohBcL2ojMibI6E/640?wx_fmt=jpeg#imgIndex=21",
+          "text": "半导体晶圆"
+        },
+        {
+          "imageIndex": 13,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJWFItcAstILwnZ1RefhMgq5icURp18fcoNtqF8C4cFvgiadFCibAMpV0yu5WPoQXQZc3NicQcJRMaZo3ejcTsyj0SOgUQSSzqSXL7c/640?wx_fmt=png&from=appmsg#imgIndex=22",
+          "text": "真实的X射线衍射点阵"
+        }
+      ],
       "blockingIssues": [],
       "warnings": [
         "已删除回顾／近期热门文章标题及其后面的内容。",
+        "已将 4 处图片下方的灰色小字识别为图注。",
         "已清除 9 个没有内容的微信图片占位标签。",
         "已略去 1 处装饰背景，保留正文文字和内容图片。"
       ],
@@ -224,11 +283,12 @@
         "formulas": 0,
         "backgrounds": 0,
         "superscripts": 0,
-        "subscripts": 4
+        "subscripts": 4,
+        "captions": 9
       },
       "formatting": {
         "boldNodes": 37,
-        "coloredNodes": 81,
+        "coloredNodes": 90,
         "colors": [
           "rgb(56, 45, 41)",
           "rgb(134, 122, 114)",
@@ -238,9 +298,57 @@
         ],
         "formulas": []
       },
+      "captions": [
+        {
+          "imageIndex": 1,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJWWCViaQy2bQlGZSp3HicdV0viciaNibk6iaYP0AfBuQu1fE9db8okdp22lVJE0GQiaw6dYJx1MicCcbBLzmAB4VrTg7FibctcSGiar4ZeTw/640?wx_fmt=png&from=appmsg#imgIndex=1",
+          "text": "找胶带口：手上活儿不大，耐心消耗不小。"
+        },
+        {
+          "imageIndex": 2,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJVf8zRib1Su4sgVj8VicTkJxia9F5Pw4xIKyjPlcvoF8FJ9OyGeI8UWQ8pvfSI3RtOXsQnibcPyMC4aia1SibW9QZU4AIj9FAQAF5m9w/640?wx_fmt=png&from=appmsg#imgIndex=2",
+          "text": "从轻放到读出，每一轮都回到同一起点。图片由ai辅助生成"
+        },
+        {
+          "imageIndex": 3,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJUZibr8x3YkDcDKz9FaP25E8cJzp9UdwaSYdHb2OJ8hqegmYHLak4RmNtNsrVn5LoQxxocYliaToA1XBuagnzxUe9rNnD5kC0IGo/640?wx_fmt=png&from=appmsg#imgIndex=3",
+          "text": "左图箭头指向转折处，右图Before、After分别为操作前后，均为平放状态"
+        },
+        {
+          "imageIndex": 4,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJUSBsSKiaBL6moreaM1iaiaRrQqyJelXia4ygUjxUGicq3BBAgkjibsmayZtgfWic7pj7F94zPmULNbhJuktAIcDKN4jCtibLLRwKZYvsc/640?wx_fmt=png&from=appmsg#imgIndex=4",
+          "text": "以为只是随手一撕，原来还附带“留痕”。"
+        },
+        {
+          "imageIndex": 5,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJVwX7jlCPfVWck5CrT9AuXZXDwpHWgqDIhjiaDCmtzFZFqm7hgy98Eza12fBVAvVQHxx01wAVetO0VCEiaiaazhmvicDO1iaYwd2QpA/640?wx_fmt=png&from=appmsg#imgIndex=5",
+          "text": "蓝线：写入记忆后 红点：没有这些记忆的对照"
+        },
+        {
+          "imageIndex": 6,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJUD3fibB4UEaF2vx0KFrYU1T3CLXhIPauYIhWcQApvnHZWAoVeySgGmDQ4lWzAXaYBicsNDrzyB6zRG6pE7cOlxXdwJdt9vjqKibc/640?wx_fmt=png&from=appmsg#imgIndex=6",
+          "text": "原来，线索藏在拉力里。"
+        },
+        {
+          "imageIndex": 7,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJWjUqzkjlrvb0libvWslgxoTIvgVP23DkJLQcrJTuPJ64EwibHYP67LkUR5ibHzTAKAOibCViaSfl4UuEN2PFGlBwuYticYuBpAOeftA/640?wx_fmt=png&from=appmsg#imgIndex=7",
+          "text": "两个方向都走完整三步。图片由ai辅助生成"
+        },
+        {
+          "imageIndex": 8,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJXJRe8jdr8EDKL1LGE2E0E6bTm7PectLOia7Zp2J3HShrmqmH5TV59hJTib4lMu3tWw98DpktlkK0BSVIhvKtica90ibvQ3FXv7oxE/640?wx_fmt=png&from=appmsg#imgIndex=8",
+          "text": "虽然能记，但挑顺序。"
+        },
+        {
+          "imageIndex": 9,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJUeBoCDIgnACmmDngoaQB3g5rKicTNpThvA9fGtceEbUmyp8dCmUfdo6CSM43XDK2btvqfdrlYGVkFFP2vKicwwicaqamJz6FMe70/640?wx_fmt=png&from=appmsg#imgIndex=9",
+          "text": "a：旧峰在第二次读出时接近消失 b：在25毫米转折处保持100秒后，后续读出仍有残余峰；c：换为亚克力底面后也有残余峰。NR为读出次数"
+        }
+      ],
       "blockingIssues": [],
       "warnings": [
-        "已删除回顾／近期热门文章标题及其后面的内容。"
+        "已删除回顾／近期热门文章标题及其后面的内容。",
+        "已将 9 处图片下方的灰色小字识别为图注。"
       ],
       "localAssets": [
         {
@@ -283,11 +391,12 @@
         "formulas": 0,
         "backgrounds": 0,
         "superscripts": 0,
-        "subscripts": 0
+        "subscripts": 0,
+        "captions": 19
       },
       "formatting": {
         "boldNodes": 94,
-        "coloredNodes": 166,
+        "coloredNodes": 185,
         "colors": [
           "rgb(62, 62, 62)",
           "rgb(0, 0, 0)",
@@ -303,9 +412,107 @@
         ],
         "formulas": []
       },
+      "captions": [
+        {
+          "imageIndex": 14,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJXrPu6derHCpAjGdydwia6vWMWLNSjYicWcNgww8odofOHXOOOTqR3tzHGVfaicBsKzsO2U0icS0xNQ2yprgFNrp8QibcICysv2DRrc/640?wx_fmt=png&from=appmsg#imgIndex=14",
+          "text": "图1｜“流放明早九点还要继续”的实物版。图源：网友二创，原作者见图内水印"
+        },
+        {
+          "imageIndex": 16,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJU1lzvmiaFRVjjXERNL6sXMp8oj8GmgUvSY3la7YSIoBW0XyIur28cAjnkLBGtalyDJVqgcKoXYJrfmdnxSZxibjwMOsLQCib5mvs/640?wx_fmt=jpeg&from=appmsg#imgIndex=16",
+          "text": "图2｜许飞回忆当年一起吃零食的习惯。图源：芒果tv"
+        },
+        {
+          "imageIndex": 19,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJV2SQtOtQTkiaFVmDXsdsUvSJSiaSZicypM8jnIkcfhiarXm8HaPZI2ebwBAzlkw2I2S5oDThyO0VbSv5WEFJneibyJgsvDGdEuOysE/640?wx_fmt=jpeg#imgIndex=19",
+          "text": "图3｜同样是 H＝0，内部磁化可以不同"
+        },
+        {
+          "imageIndex": 23,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJXqJnJDnVdia8dlr8SuggyOBBTYTZX7QYib4dg1s7Mw7wC1ZNYX6yKyAwxFacNx5ydasrhsiaCAqjE0M3HibVPDBRxic1UbtL5KYubM/640?wx_fmt=jpeg&from=appmsg#imgIndex=23",
+          "text": "图4｜网友先把“牢”画出来了。接下来看看，没有栅栏时，材料还能怎样被困住。图源：水印"
+        },
+        {
+          "imageIndex": 26,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJW1QLQQossQFBd3MMSoOsR2PaRX2ICdMkoxIedNiaFWP1bFgOHNAmVyaINJqdlwQvdhd7kBEmv1L2Z61ic0ccoIUfBAiabxxwd724/640?wx_fmt=png&from=appmsg#imgIndex=26",
+          "text": "图5 | 紫色、橙色路径表示失败的尝试，蓝色路径表示成功越过能垒。"
+        },
+        {
+          "imageIndex": 27,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJUia1tVQUIXGcvscgkKaJtKicM5icXjvw0u4E895GwbDLP0QrE3crlTvgicp5HdGaEUWvAjjmbjc7yUrVccM2PHhafUhiaH4icD1OOj0/640?wx_fmt=jpeg#imgIndex=27",
+          "text": "图6｜相邻状态能量更低，也得先越过门槛。外场既会改变谷底的高低，也会改变能垒。"
+        },
+        {
+          "imageIndex": 30,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJU1ut8oJ3DzUhT7FF41JcHJFAJduwOkpIS2iaQYN00UkDY3LIbAvl4y0z0Dsp2xvwP7DHvnebMDuAuCuXJ71P9mcEQM2FkK8VM0/640?wx_fmt=png&from=appmsg#imgIndex=30",
+          "text": "图7｜畴壁里不是突然换向。上图（Néel壁）在图面内逐渐转过，下图（Bloch壁）还经过垂直图面的方向。图源：[13]"
+        },
+        {
+          "imageIndex": 31,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJVWxL3hicibebZWR3FhsPOjwnJFVToiak1unjSL84rLSwto5W1SwzL2bIsRZ6Ar9msYYMnZvsqDxWdtTnZjUtcyHqleYR34QnY4vY/640?wx_fmt=png&from=appmsg#imgIndex=31",
+          "text": "有门，但卡住了..."
+        },
+        {
+          "imageIndex": 32,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJXyNAfQAnLc3pU1mslEaT3mKoHYJROaHw9LfXiaMn1cgqkxw1sGE1qb9JP8almR2RAviaeraaibHsA7S087u7M05f9wYAaUIJvAFk/640?wx_fmt=jpeg#imgIndex=32",
+          "text": "图8｜先弯曲，再越过缺陷"
+        },
+        {
+          "imageIndex": 35,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJVtFbnZtqD5T3cOVObnR4ibib5EWy3Wic93QT566bATC2XHywT1ial39hNAeJicxRD1TSrtcvd7jg8oyo3ibn20cltmwQQasweVyj3Zk/640?wx_fmt=png&from=appmsg#imgIndex=35",
+          "text": "图9｜磁化的跳跃可以“听”出来：线圈检测磁通变化，信号经放大器送到扬声器。"
+        },
+        {
+          "imageIndex": 37,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJWfGYzklAIp17e3VdIibsWsztcTgtXdib6jXSQNXwQeZcuH0awX8Lb0iaURcsABn0ajaibvJkk5B4rPR4Pje7CaYn56bmCJMntLlS8/640?wx_fmt=png&from=appmsg#imgIndex=37",
+          "text": "图10｜网友据《后会友期》画面二创。图源网络"
+        },
+        {
+          "imageIndex": 40,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJUZmqpmmewrX56Y60JXBlf988opibZfDMN6Du3Riay1PPChaIcMic6dnBOJPAZWDLUANmcObEaficQQzKbCzZ15OQql8pfDSToBiajE/640?wx_fmt=jpeg#imgIndex=40",
+          "text": "图11｜B→C→B：在具有回点记忆的体系中，回到转向点，还能接回原来的支路。"
+        },
+        {
+          "imageIndex": 43,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJXRnGMNmg1sicf6ypUOibnckdzKIf6rc8RbDbXmp6CT3TI6j3b4htZ3uIv3ekjGE9FPWls7TbKyNvDrdKSyoVLYgQxxpGEqhppuc/640?wx_fmt=jpeg&from=appmsg#imgIndex=43",
+          "text": "图12｜这次纵轴换成了磁感应强度B。在正文所述测量条件下，回线面积对应单位体积每循环耗能。图源：Stanford Magnets"
+        },
+        {
+          "imageIndex": 44,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJVFNIrtQDpPicnMPkBJn6hWu3HFAORDdypEeHa3xAN4r5eKPfBoqYtuEt6O9pia0O0nrVXlSIH7j0OfomrhC9bm7DRR3JRjNX36Q/640?wx_fmt=png&from=appmsg#imgIndex=44",
+          "text": "图13｜聊了好几轮以后。图源网络。"
+        },
+        {
+          "imageIndex": 49,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJU4GNEWHSSPxNFXfof5enibMFmDCHPiaf0riaLKFNtZHx7Dribn1VaGupdcvJibsLstMtgIyB9iapU6Uiclxau2UH9uAcNLNa3LicZsdmg/640?wx_fmt=jpeg#imgIndex=49",
+          "text": "图14｜正文公式中的ΔE，在这张图中记作E_B：从谷底到能量峰的差，才是翻转需要跨过的门槛。图源：[14]"
+        },
+        {
+          "imageIndex": 50,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJWJowONO6yAMpiciaFFcFd3Dm1MPicqh15A1yVoXo7un3icgNuKJptdZtcrmrwHU6tPFiaVibs7Xysh28lUFOc5oQFfRtMyQjqKjCmR8/640?wx_fmt=png&from=appmsg#imgIndex=50",
+          "text": "图15｜实测例子：固定反向外场后，钕铁硼磁体的磁极化 J（与 M 成正比）仍继续减小。横轴为对数时间；圆点是测量值，虚线是对数段拟合。图源：[11]"
+        },
+        {
+          "imageIndex": 53,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJXiaUss1NibNPon7taicz1cswxDhDhud4L4LNROoPENmBgD8Muxllv64h0RHzV5VjGIL4vt6zwz6yeVuaYCrmibdTSuCMcOjQJmxkQ/640?wx_fmt=png&from=appmsg#imgIndex=53",
+          "text": "图16｜Kovacs“驼峰”的模拟例子：一些经历不同等待过程的曲线先升后降。横轴为对数时间，纵轴为体积；关注虚线右侧的后续演化。图源：[12]"
+        },
+        {
+          "imageIndex": 57,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJWOfcNP95evNRHVX1jFsdWVjLIdhzCNFeea2JhJUUwQXew3GiarCLES5SQO2DQPvV9T5v3lKvaEQQ6PqovRvE7qE3pBOqx0iby7A/640?wx_fmt=jpeg&from=appmsg#imgIndex=57",
+          "text": "图17｜给自己一点发出普通问候的勇气。"
+        },
+        {
+          "imageIndex": 60,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJWIicNkVz6PNZp8W3WCj90Y1YOBzrqsoqCJ4Sga1JiajXOBuJDfxibtibfwJyP9iategFQpZ9x7JayRSwsR5VEL9uD7w4HPR9lFyXH8/640?wx_fmt=jpeg&from=appmsg#imgIndex=60",
+          "text": "图18｜“只是因为我愿意，和她一起浪费时间。”一起相处，本身也可以是一件具体的小事。"
+        }
+      ],
       "blockingIssues": [],
       "warnings": [
-        "已删除回顾／近期热门文章标题及其后面的内容。"
+        "已删除回顾／近期热门文章标题及其后面的内容。",
+        "已将 19 处图片下方的灰色小字识别为图注。"
       ],
       "localAssets": [
         {

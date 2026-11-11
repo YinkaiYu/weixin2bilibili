@@ -16,10 +16,15 @@ function preflight(html){
   [...doc.querySelectorAll('img')].forEach((img,i)=>{const url=`https://i0.hdslb.com/bfs/new_dyn/preflight-${i}.png`;img.src=url;images.set(url,{url,width:Number(img.getAttribute('data-w')||img.width)||640,height:Number(img.getAttribute('data-h')||img.height)||480,size:1});});
   return toOpus(doc.body.innerHTML,{images});
 }
-function chooseCollection(names,collections){
+function chooseCollection(names,collections,title=''){
   const normalize=s=>String(s||'').normalize('NFKC').replace(/\s+/g,'').trim();
-  const found=collections.filter(c=>names.some(n=>normalize(n)===normalize(c.name)));
-  return found.length===1?found[0]:null;
+  const explicitNames=Array.isArray(names)?names.filter(name=>normalize(name)):[];
+  // Some directly loaded WeChat pages omit album metadata. A final title label
+  // is only a fallback candidate; it cannot override explicit source metadata.
+  const suffix=String(title||'').match(/[|｜]([^|｜]+)$/u)?.[1]?.trim();
+  const candidates=explicitNames.length?explicitNames:suffix?[suffix]:[];
+  const found=collections.filter(c=>candidates.some(n=>normalize(n)===normalize(c.name)));
+  return {collection:found.length===1?found[0]:null,candidates};
 }
 export async function runImport({sourceUrl='',html='',localFiles:files=[]},onProgress=()=>{}){
   if(!html){let url;try{url=new URL(sourceUrl);}catch{throw new Error('请输入微信公众号文章链接。');}
@@ -43,7 +48,7 @@ export async function runImport({sourceUrl='',html='',localFiles:files=[]},onPro
   await chrome.storage.local.set({[pendingKey]:{jobKey,startedAt:Date.now()}});
   const client=createBridgeClient({jobKey});
   onProgress('正在匹配 B站文集…');const account=await client.getLoginInfo();
-  const collections=await client.listCollections();const collection=chooseCollection(article.collectionNames,collections);
+  const collections=await client.listCollections();const {collection,candidates}=chooseCollection(article.collectionNames,collections,article.title);
   const cacheKey='uploadCache:'+account.userId;
   let cache=(await chrome.storage.local.get(cacheKey))[cacheKey]||{};
   const migrated=await migrateImages(cleaned.html,{coverUrl:article.coverUrl,client,cache,cacheKey:account.userId,localFiles,savedPaths,fetchImpl:bridgeFetch,onCache:async value=>{
@@ -54,7 +59,7 @@ export async function runImport({sourceUrl='',html='',localFiles:files=[]},onPro
   onProgress('正在保存并核对草稿…');
   const result=await client.saveDraft({jobKey,title:article.title,content:native.content,summary:native.summary,coverUrl:migrated.coverUrl,collectionId:collection?.id,original:true});
   const warnings=[...prepared.warnings,...native.warnings];
-  if(!collection&&article.collectionNames.length)warnings.push(`未找到唯一对应的文集（${article.collectionNames.join('、')}），请在发布设置中选择。`);
+  if(!collection&&candidates.length)warnings.push(`未找到唯一对应的文集（${candidates.join('、')}），请在发布设置中选择。`);
   if(result.verified===false){warnings.unshift(...(result.verification?.issues||['草稿已保存，读回检查未通过，请核对。']));}
   else await chrome.storage.local.remove(pendingKey);
   return {...result,warnings:[...new Set(warnings)],title:article.title};

@@ -10,9 +10,9 @@ const originalImage='https://mmbiz.qpic.cn/example/cover.png';
 const uploadedImage='https://i0.hdslb.com/bfs/new_dyn/transferred.png';
 // Complete 1px PNG; byte parsing and upload are real, actual raster decoding is not required.
 const validPng=Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX6kAAAAASUVORK5CYII=','base64'));
-const articleHtml=({extraImage=''}={})=>`<!doctype html><html><head><script>var msg_cdn_url="${originalImage}";var album_name="正经玩";</script></head><body><h1 id="activity-name">原生导入测试</h1><div id="js_content"><p><strong>加粗文字</strong><span style="color:#e00000">彩色文字</span> H<sub>2</sub>O</p><p><img data-src="${originalImage}" src="${originalImage}"></p>${extraImage?`<p><img src="${extraImage}"></p>`:''}<h2>往期回顾</h2><p>不应同步这段内容</p></div></body></html>`;
+const articleHtml=({extraImage='',title='原生导入测试',collectionName='正经玩'}={})=>`<!doctype html><html><head><script>var msg_cdn_url="${originalImage}";${collectionName===null?'':`var album_name=${JSON.stringify(collectionName)};`}</script></head><body><h1 id="activity-name">${title}</h1><div id="js_content"><p><strong>加粗文字</strong><span style="color:#e00000">彩色文字</span> H<sub>2</sub>O</p><p><img data-src="${originalImage}" src="${originalImage}"></p>${extraImage?`<p><img src="${extraImage}"></p>`:''}<h2>往期回顾</h2><p>不应同步这段内容</p></div></body></html>`;
 
-function setup(){
+function setup({collections=[{id:42,name:'正经玩',total:1},{id:84,name:'其他栏目',total:2}],sourceHtml=articleHtml()}={}){
   const previous={chrome:globalThis.chrome,document:globalThis.document,DOMParser:globalThis.DOMParser,createImageBitmap:globalThis.createImageBitmap};
   const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'https://member.bilibili.com/york/read-editor'});
   globalThis.document=dom.window.document;globalThis.DOMParser=dom.window.DOMParser;
@@ -30,7 +30,7 @@ function setup(){
     if(url===originalImage)return new Response(validPng,{headers:{'Content-Type':'image/png'}});
     if(url==='https://mmbiz.qpic.cn/example/broken.png')return new Response('not found',{status:404});
     if(url.endsWith('/x/web-interface/nav'))return json({isLogin:true,mid:8080,uname:'测试账号',face:''});
-    if(url.endsWith('/x/article/creative/list/all'))return json({lists:[{id:42,name:'正经玩',total:1},{id:84,name:'其他栏目',total:2}]});
+    if(url.endsWith('/x/article/creative/list/all'))return json({lists:collections});
     if(url.endsWith('/x/dynamic/feed/draw/upload_bfs')){
       if(switches.failUpload)return new Response(JSON.stringify({code:-400,message:'模拟图片上传失败'}));
       const file=init.body.get('file_up');uploads.push(new Uint8Array(await file.arrayBuffer()));
@@ -54,7 +54,7 @@ function setup(){
   const handler=createBackgroundHandler({client:nativeClient,fetchImpl,storage,extensionId});
   globalThis.chrome={storage:{local:storage},runtime:{id:extensionId,sendMessage:async message=>{
     messages.push(structuredClone(message));
-    if(message.type==='LOAD_ARTICLE')return {ok:true,data:{html:articleHtml()}};
+    if(message.type==='LOAD_ARTICLE')return {ok:true,data:{html:sourceHtml}};
     return handler(message,sender);
   }}};
   const pending=()=>Object.entries(state).filter(([key])=>key.startsWith('pendingJob:'));
@@ -77,6 +77,46 @@ test('native import uses real parsing/conversion, uploads PNG once for body and 
     assert.ok(!JSON.stringify(arg).includes('不应同步这段内容'));
     assert.ok(progress.length>2&&progress.every(p=>typeof p==='string'));
     assert.equal(app.pending().length,0,'completed job is cleared');
+  }finally{app.close();}
+});
+
+test('direct import carries a grey image caption through cleanup upload save and readback exactly once',async()=>{
+  const caption='显微镜下的实验样品';
+  const sourceHtml=articleHtml().replace('<h2>往期回顾</h2>',`<p style="color:#888;font-size:14px;text-align:center">${caption}</p><p>下一段正文保持可编辑。</p><h2>往期回顾</h2>`);
+  const app=setup({sourceHtml});try{
+    const result=await runImport({sourceUrl});
+    assert.equal(result.verified,true);
+    const content=app.savedPayloads[0].arg.opus.content;
+    const pictures=content.paragraphs.flatMap(p=>p.pic?.pics||[]);
+    assert.deepEqual(pictures.map(p=>({url:p.url,comment:p.comment})),[{url:uploadedImage,comment:caption}]);
+    const text=content.paragraphs.flatMap(p=>p.text?.nodes||[]).map(n=>n.word?.words||'').join('');
+    assert.ok(!text.includes(caption),'图注只保留在图片注释中');
+    assert.ok(text.includes('下一段正文保持可编辑。'));
+    assert.equal(app.uploads.length,1,'图注不能触发额外图片上传或局部截图');
+  }finally{app.close();}
+});
+
+const collectionCases=[
+  {name:'half-width title suffix when source metadata is absent',title:'手机的清晰度 | 正经玩',collectionName:null,expectedId:42},
+  {name:'full-width suffix with normalized spacing',title:'手机的清晰度｜ 正 经 玩 ',collectionName:null,expectedId:42},
+  {name:'explicit source collection takes precedence over title',title:'手机的清晰度 | 正经玩',collectionName:'其他栏目',expectedId:84},
+  {name:'unmatched explicit collection cannot fall back to title',title:'手机的清晰度 | 正经玩',collectionName:'源专栏未建立',expectedId:0,warning:'源专栏未建立'},
+  {name:'ambiguous normalized collection names remain unselected',title:'手机的清晰度 | 正经玩',collectionName:null,collections:[{id:42,name:'正经玩'},{id:43,name:'正 经玩'}],expectedId:0,warning:'正经玩'},
+  {name:'title suffix does not use substring matching',title:'手机的清晰度 | 其他正经玩',collectionName:null,expectedId:0,warning:'其他正经玩'},
+  {name:'only the final title suffix is a candidate',title:'手机的清晰度 | 正经玩 | 未知栏目',collectionName:null,expectedId:0,warning:'未知栏目'},
+  {name:'title without a suffix delimiter is not a collection hint',title:'正经玩',collectionName:null,expectedId:0},
+];
+for(const fixture of collectionCases)test(`direct-link collection matching: ${fixture.name}`,async()=>{
+  const app=setup({collections:fixture.collections,sourceHtml:articleHtml(fixture)});try{
+    const result=await runImport({sourceUrl});
+    assert.equal(result.verified,true);
+    assert.equal(app.savedPayloads[0].arg.list_id,fixture.expectedId);
+    const collectionWarnings=result.warnings.filter(w=>w.includes('文集'));
+    if(fixture.warning){
+      assert.equal(collectionWarnings.length,1);
+      assert.ok(collectionWarnings[0].includes(fixture.warning));
+      assert.match(collectionWarnings[0],/未找到唯一对应.*请在发布设置中选择/);
+    }else assert.deepEqual(collectionWarnings,[]);
   }finally{app.close();}
 });
 

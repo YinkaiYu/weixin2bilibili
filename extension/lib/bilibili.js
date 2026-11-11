@@ -68,6 +68,11 @@ function validateContent(content) {
     if (!(Number(picture.width) > 0) || !(Number(picture.height) > 0) || !(Number(picture.size) > 0)) {
       throw new BilibiliError('图片尺寸或文件大小缺失，请重新上传后再保存。');
     }
+    // The native editor's CaptionManager limits plain captions to 100 UTF-16
+    // code units. The converter preserves longer captions as body paragraphs.
+    if (picture.comment != null && (typeof picture.comment !== 'string' || picture.comment.length > 100)) {
+      throw new BilibiliError('图片注释不是有效的 100 字符以内纯文字，请保留为图片下方正文。');
+    }
   }
   for (const para of content.paragraphs) {
     for (const node of para.text?.nodes || []) {
@@ -185,8 +190,12 @@ export function verifyDraft(expected, draft) {
       const wanted = canonicalContent(arg.opus.content), actual = canonicalContent(draft.opus.content);
       if (JSON.stringify(wanted) !== JSON.stringify(actual)) {
         issues.push('B 站保存后的正文、图片顺序、公式或文字样式发生变化，请打开草稿核对。');
-        const fonts = [], paletteChanges = [];
+        const fonts = [], paletteChanges = [], captionChanges = [];
         for (let p=0;p<Math.min(wanted.length,actual.length);p++) {
+          const beforePictures = wanted[p].pictures || [], afterPictures = actual[p].pictures || [];
+          for (let n=0;n<Math.max(beforePictures.length,afterPictures.length);n++) {
+            if ((beforePictures[n]?.comment || '') !== (afterPictures[n]?.comment || '')) captionChanges.push(p+1);
+          }
           const before=wanted[p].text || [], after=actual[p].text || [];
           for (let n=0;n<Math.min(before.length,after.length);n++) {
             if(before[n].type!==1 || after[n].type!==1 || before[n].text!==after[n].text) continue;
@@ -196,6 +205,7 @@ export function verifyDraft(expected, draft) {
         }
         if(fonts.length) issues.push(`${fonts.length} 处文字字号发生变化（${fonts.slice(0,3).map(item=>`第 ${item.paragraph} 段 ${item.from}→${item.to}`).join('、')}${fonts.length>3?'…':''}）。`);
         if(paletteChanges.length) issues.push(`${paletteChanges.length} 处文字颜色或 B 站主题色发生变化（第 ${[...new Set(paletteChanges)].slice(0,5).join('、')} 段），请检查明暗模式下的显示。`);
+        if(captionChanges.length) issues.push(`${captionChanges.length} 处图片注释发生变化（第 ${[...new Set(captionChanges)].slice(0,5).join('、')} 段），请检查图注是否完整并对应正确图片。`);
       }
     } catch { issues.push('保存后的正文包含无法核对的图片地址。'); }
   }
