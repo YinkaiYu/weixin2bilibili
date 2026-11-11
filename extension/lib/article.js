@@ -152,9 +152,28 @@ function decorativeBackgroundKind(element) {
   if(semantic) return '';
   const text=normalizedText(element.textContent);
   if (!text) {
-    return ['presentation','none'].includes(element.getAttribute('role')?.trim().toLowerCase()) ? 'empty' : '';
+    if(['presentation','none'].includes(element.getAttribute('role')?.trim().toLowerCase()))return 'empty';
+    const row=element.parentElement,siblings=row?[...row.children].filter(node=>node!==element):[];
+    const label=siblings.length===1?siblings[0]:null;
+    if(label && ['flex','inline-flex'].includes(row.style.display) && !row.closest('figure,figcaption,table,pre,code') &&
+      !row.querySelector(DECORATION_CONTENT) && normalizedText(label.textContent).length<=80 &&
+      normalizedText(label.textContent) && label.querySelector('strong,b,h1,h2,h3,h4,h5,h6') &&
+      cssColor(label.style.backgroundColor)?.[3]>0 && label.style.backgroundColor===element.style.backgroundColor &&
+      ['width','height'].every(property=>/^\d+(?:\.\d+)?px$/.test(element.style[property])&&parseFloat(element.style[property])>0&&parseFloat(element.style[property])<=2*captionTextStyle(label).size) &&
+      parseFloat(element.style.marginTop)<0 && textReadableWithoutImage(label))return 'empty';
+    return '';
   }
   const label = /^[qa]\d{1,4}[.:：、)）]?$/i.test(text);
+  // A stretch-to-fit background behind one bold title is a label skin. Keep
+  // the actual text/color rather than capturing a full-width screenshot of it.
+  const titleLabel=element.style.display==='inline-block' && element.style.width==='auto' &&
+    element.style.backgroundSize==='100% 100%' && element.style.backgroundRepeat==='no-repeat' &&
+    ['flex','inline-flex'].includes(element.parentElement?.style.display) && text.length<=80 &&
+    element.querySelectorAll('p').length===1 &&
+    normalizedText([...element.querySelectorAll('strong,b')].filter(node=>!node.parentElement.closest('strong,b')).map(node=>node.textContent).join(''))===text &&
+    Number.parseFloat(element.style.paddingTop)>0 && Number.parseFloat(element.style.paddingLeft)>0 &&
+    !element.closest('figure,figcaption,table,pre,code,blockquote,p');
+  if(titleLabel && textReadableWithoutImage(element,null,2))return 'background';
   const shortHeading = /^h[1-6]$/.test(element.localName) && text.length<=40 && smallBackgroundTile(element);
   const textureCard = text.length>=30 && /(?:^|\s)repeat(?:-[xy])?(?:\s|$)/.test(element.style.backgroundRepeat) && smallBackgroundTile(element);
   return (label || shortHeading || textureCard) && textReadableWithoutImage(element) ? 'background' : '';
@@ -243,7 +262,7 @@ function normalizeGradientBackgrounds(body) {
     if(!/gradient\(/i.test(gradient) || /var\s*\(/i.test(gradient)) {
       element.setAttribute('data-sync-unsupported','CSS 渐变背景（变量无法安全解析）');counts.unsupported++;continue;
     }
-    if(decorativeBackgroundKind(element)==='background') {
+    if(decorativeBackgroundKind(element)==='background' || faintArticleTexture(element,gradient)) {
       clearDecorativeBackground(element);counts.decorative++;continue;
     }
     const marker=gradientMarkerColor(gradient,element);
@@ -261,14 +280,41 @@ function normalizeGradientBackgrounds(body) {
   return counts;
 }
 
+// Low-opacity repeating paper/grid textures behind an article are page furniture,
+// not a reason to rasterize all paragraphs, photographs and formula sources.
+function faintArticleTexture(element,gradient) {
+  if(!['section','div','article','main'].includes(element.localName)||element.querySelectorAll('p').length<3 ||
+    element.closest('figure,figcaption,table,pre,code') || ['role','aria-label','title'].some(key=>element.hasAttribute(key)))return false;
+  const sizes=cssArguments(element.style.backgroundSize),repeats=cssArguments(element.style.backgroundRepeat),layers=cssArguments(gradient);
+  if(!sizes?.length||!repeats?.length||!layers?.length)return false;
+  let opacity=0;
+  for(let i=0;i<layers.length;i++){
+    const size=sizes[i%sizes.length].split(/\s+/);
+    const smallTile=size.length===2&&size.every(value=>/^\d+(?:\.\d+)?px$/.test(value)&&parseFloat(value)>0&&parseFloat(value)<=64);
+    const match=layers[i].match(/^linear-gradient\((.*)\)$/i),args=match&&cssArguments(match[1]);
+    if(!args)return false;
+    if(/^(?:[-\d.]+deg|to\s)/i.test(args[0]))args.shift();
+    const colors=args.map(stop=>cssColor(stop.match(/^(rgba?\([^)]*\)|transparent)(?:\s|$)/i)?.[1]));
+    if(colors.length<2||colors.some(color=>!color))return false;
+    // Some saved paper templates contain a single faint rule rather than a
+    // repeated tile. Its hard edge must occupy at most 5% of the background.
+    const positions=args.map(stop=>Number(stop.match(/\s([\d.]+)%$/)?.[1]));
+    const thinRule=colors.length===2&&colors[1][3]===0&&positions[0]>0&&positions[0]<=5&&positions[0]===positions[1];
+    if(!(smallTile&&repeats[i%repeats.length]==='repeat') && !(thinRule&&(smallTile||['auto','auto auto','initial'].includes(size.join(' ')))))return false;
+    opacity+=Math.max(...colors.map(color=>color[3]));
+  }
+  return opacity<=0.1 && textReadableWithoutImage(element,null,2);
+}
+
 function framedTextCard(element) {
   const css=element.style, background=cssColor(css.backgroundColor);
-  if(!background || background[3]===0 || !['','block'].includes(css.display) || hasBackgroundImage(css)) return false;
+  const fullWidthPanel=css.display==='inline-block' && css.width==='100%' && ['flex','inline-flex'].includes(element.parentElement?.style.display) && element.querySelectorAll('p').length>=2;
+  if(!background || background[3]===0 || (!['','block'].includes(css.display)&&!fullWidthPanel) || hasBackgroundImage(css)) return false;
   if(element.hasAttribute('data-lazy-bgimg') || element.hasAttribute('data-sync-background-url') || element.hasAttribute('role') || element.hasAttribute('aria-label') || element.hasAttribute('title')) return false;
   const sides=['Top','Right','Bottom','Left'];
   const borders=sides.map(side=>[css['border'+side+'Width'],css['border'+side+'Style'],css['border'+side+'Color']]);
-  if(borders.some(([width,style])=>!(Number.parseFloat(width)>0) || !['solid','dashed','dotted','double'].includes(style))) return false;
-  if(borders.some(border=>border.join('|')!==borders[0].join('|'))) return false;
+  const borderless=fullWidthPanel&&borders.every(([width,style])=>(!width||Number.parseFloat(width)===0)&&['','none','initial'].includes(style));
+  if(!borderless && (borders.some(([width,style])=>!(Number.parseFloat(width)>0) || !['solid','dashed','dotted','double'].includes(style)) || borders.some(border=>border.join('|')!==borders[0].join('|')))) return false;
   const positive=value=>Number.parseFloat(value)>0;
   if(!['Top','Bottom'].some(side=>positive(css['padding'+side])) || !['Left','Right'].some(side=>positive(css['padding'+side]))) return false;
   // Figure/legend/code context and graphical contents can give the backdrop a
@@ -355,11 +401,11 @@ function removeTitleFurniture(body,imageIndices) {
     if(firstCaptionCandidate(nextCaptionNode(grid,body)))continue;
     const cells=children.filter(node=>normalizedText(node.textContent)||node.querySelector('img')).map(node=>gridCell(node.style));
     if(cells.some(cell=>!cell||cell!==cells[0]))continue;
-    // A leading poster, with an independent typographic heading and explicitly
-    // noninteractive image layers. Ordinary collages and annotated figures stay.
+    // The first typographic component can follow standalone opening images.
+    // Earlier prose, captions, figures or semantic media mean body content.
     const before=body.ownerDocument.createRange();before.selectNodeContents(body);before.setEndBefore(grid);
     const preceding=before.cloneContents();
-    if(normalizedText(preceding.textContent)||containsTemplateMedia(preceding,'img,'+protectedMedia))continue;
+    if(normalizedText(preceding.textContent)||containsTemplateMedia(preceding,protectedMedia)||[...preceding.querySelectorAll('img')].some(contentImage))continue;
     if(texts.some(node=>normalizedText(node.textContent).length>80)||!texts.some(node=>bold(node)&&[node,...node.querySelectorAll('*')].some(el=>captionTextStyle(el).size>=28)))continue;
     if(!images.every(image=>{
       for(let el=image;el&&el!==grid;el=el.parentElement)if(el.style.pointerEvents==='none'&&el.style.lineHeight==='0')return true;
@@ -367,6 +413,18 @@ function removeTitleFurniture(body,imageIndices) {
     })||!textReadableWithoutImage(grid,null,2))continue;
     for(const image of images)discard(image,'noninteractive-title-poster');
     for(const branch of pictureBranches)branch.remove();
+    // An uncaptioned wide banner immediately before a recognized opening
+    // poster is header furniture. Width alone never classifies body images.
+    for(const image of [...body.querySelectorAll('img')]){
+      if(!before.intersectsNode(image)||contentImage(image))continue;
+      const width=Number(image.getAttribute('data-w')||image.getAttribute('width'));
+      const ratio=Number(image.getAttribute('data-ratio')) || Number(image.getAttribute('height'))/width;
+      if(!(width>0&&ratio>0&&ratio<=1/3))continue;
+      let anchor=image;
+      while(anchor.parentElement!==body&&!normalizedText(anchor.parentElement.textContent)&&anchor.parentElement.querySelectorAll('img').length===1)anchor=anchor.parentElement;
+      if(firstCaptionCandidate(nextCaptionNode(anchor,body)))continue;
+      discard(image,'opening-title-banner');
+    }
     flow(grid);
   }
   for(const row of [...body.querySelectorAll('section,div,header')]) {
@@ -817,6 +875,11 @@ export function cleanArticle(html, options = {}) {
   stats.removedStanceStatements=removeStanceStatements(body);
   stats.removedOpeningLeads=removeOpeningInteractionLead(body);
   stats.removedComponentHints=removeComponentHints(body);
+  stats.removedLiveNotices=0;
+  for(const card of body.querySelectorAll('mp-common-videosnap[data-type="live"][data-noticeid]')) {
+    if(!card.getAttribute('data-noticeid').startsWith('finderlivenotice-'))continue;
+    card.remove();stats.removedLiveNotices++;
+  }
   stats.trimmedTail=trimTail(body)?1:0;
   const gradients=normalizeGradientBackgrounds(body);
   stats.removedDecorativeBackgrounds+=gradients.decorative;
@@ -837,6 +900,7 @@ export function cleanArticle(html, options = {}) {
   if(stats.removedStanceStatements) warnings.push('已清除独立的立场声明，保留作者、编辑和参考资料。');
   if(stats.removedOpeningLeads) warnings.push('已清除开头的微信互动赠书引导。');
   if(stats.removedComponentHints) warnings.push('已清除微信组件的滑动提示。');
+  if(stats.removedLiveNotices) warnings.push('已清除视频号直播预约卡片。');
   if (stats.trimmedTail) warnings.push('已删除回顾、福利互动或投票等尾部栏目及其后面的内容。');
 
   for (let element of [...body.querySelectorAll('*')]) {

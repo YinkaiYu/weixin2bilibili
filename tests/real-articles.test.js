@@ -12,9 +12,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const fixtureDir = path.join(root, '测试文章');
 globalThis.DOMParser = new JSDOM('').window.DOMParser;
 const expectations = [
+  {file:'美瞳爱好者集合，新眼珠享新人生.html', collection:'线上科学日', images:21, gifs:6, formulas:0, superscripts:0, subscripts:0, backgrounds:0, captions:4},
+  {file:'细思极恐！为什么我们在三维空间里永远走不出镜像？.html', collection:'线上科学日', images:3, gifs:0, formulas:82, superscripts:0, subscripts:0, backgrounds:0, captions:0},
+  {file:'今年诺奖奖金又上涨了一百万？！发了125年，诺贝尔的钱为什么越花越多？.html', collection:'线上科学日', images:13, gifs:3, formulas:0, superscripts:0, subscripts:0, backgrounds:0, captions:9},
+  {file:'遍地开花的拼豆店，卖的竟是“诺奖物理”？（内附物理所拼豆图纸）.html', collection:'线上科学日', images:26, gifs:1, formulas:4, superscripts:0, subscripts:14, backgrounds:0, captions:12},
   {file:'不抽血不拍片，闻一闻就能接收身体警报？？？.html', collection:'翻译专栏', images:3, gifs:0, formulas:0, superscripts:0, subscripts:0, backgrounds:0, captions:1},
   {file:'为什么只睡20分钟，下午就能精神满满？_ No. 537.html', collection:'问答', images:7, gifs:0, formulas:7, superscripts:19, subscripts:0, backgrounds:0, captions:3},
-  {file:'你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html', collection:'正经玩', images:16, gifs:1, formulas:4, superscripts:0, subscripts:7, backgrounds:1, captions:4},
+  {file:'你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html', collection:'正经玩', images:16, gifs:1, formulas:4, superscripts:0, subscripts:7, backgrounds:0, captions:4},
   {file:'摸了半天找不到头，胶带却记得你撕到哪儿？.html', collection:'线上科学日', images:12, gifs:0, formulas:0, superscripts:0, subscripts:4, backgrounds:0, captions:9},
   {file:'要宣布翻篇了？那我磁化损失呢，厉娜.html', collection:'线上科学日', images:21, gifs:0, formulas:0, superscripts:0, subscripts:0, backgrounds:0, captions:19},
 ];
@@ -47,6 +51,8 @@ function sourceBaseline(source,expected){
     assert.equal(urls.length,5,'five ordinary DOI URLs are deliberately removed; citation prose remains');
   }
   if(expected.file.includes('厉娜')) for(const [index,image] of [...retained.querySelectorAll('img')].entries()) if(!contentFigureIndices.includes(index))image.remove();
+  // Reviewed header assets 0–12: opening promotion, paper, clip, waves, leaves and flowers.
+  if(expected.file.includes('美瞳')) for(const [index,image] of [...retained.querySelectorAll('img')].entries()) if(index<=12)image.remove();
   return {body:retained,text:compact(retained.textContent),images:[...retained.querySelectorAll('img')].map(imageSource).filter(Boolean),formulas:formulaSources(retained),scripts:[...retained.querySelectorAll('sup,sub')].map(node=>({tag:node.localName,text:node.textContent}))};
 }
 
@@ -121,7 +127,7 @@ for (const expected of expectations) {
       assert.equal(parsed.stats.removedComponentHints,1);
       assert.doesNotMatch(document.body.textContent,/左右滑动查看更多/);
     }
-    else assert.equal(parsed.stats.removedAnswerPanelBackgrounds,0);
+    else assert.equal(parsed.stats.removedAnswerPanelBackgrounds,expected.file.includes('拼豆')?2:0);
     if(expected.file.startsWith('摸了')) {
       assert.equal(parsed.stats.removedFormulaCardDecorations,1);
       const card=[...document.querySelectorAll('section')].find(node=>node.textContent.replace(/\s/g,'')==='ΔF=Fpeak−Fbaseline');
@@ -156,9 +162,13 @@ for (const expected of expectations) {
       assert.equal(lazyVariant.stats.removedDecorativeImages,43);
       const lazyDocument=new DOMParser().parseFromString(lazyVariant.html,'text/html');
       assert.deepEqual([...lazyDocument.images].map(image=>image.getAttribute('src')),baseline.images);
+    } else if(expected.file.includes('美瞳')) {
+      assert.equal(parsed.stats.removedDecorativeImages,13);
+      assert.deepEqual(parsed.removedDecorativeImages.map(item=>item.imageIndex).sort((a,b)=>a-b),Array.from({length:13},(_,i)=>i));
     } else assert.equal(parsed.stats.removedDecorativeImages,0);
     if (expected.collection==='正经玩') {
-      assert.deepEqual([...document.querySelectorAll('[data-sync-background-url]')].map(node=>node.getAttribute('data-sync-background-url')),[...baseline.body.querySelectorAll('[data-lazy-bgimg]')].map(node=>node.getAttribute('data-lazy-bgimg')),'unknown heading background remains the original lazy asset');
+      assert.equal(document.querySelectorAll('[data-sync-background-url]').length,0,'empty title ribbon is decorative');
+      assert.ok(document.body.textContent.includes('实验器材'));
       assert.equal(parsed.coverUrl,'https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJWOFjB3xPPD8kc4xhicGDkmqHVZUuicHQP65XJwUSZcTuZ9CJyAa3j6KjUCw70phMYIIBI1HbxYTotSz3o86TCY3EfZgazCScdg0/0?wx_fmt=jpeg');
       assert.deepEqual([...document.querySelectorAll('figure > figcaption')].map(caption=>({imageIndex:[...document.images].indexOf(caption.parentElement.querySelector('img')),text:caption.textContent.trim()})),[
         {imageIndex:0,text:'↑试图用肉眼看清手机屏幕像素的小编'},

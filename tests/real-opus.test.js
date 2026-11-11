@@ -11,9 +11,13 @@ import { toOpus } from '../extension/lib/opus.js';
 const directory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '测试文章');
 const document = new JSDOM('').window.document;
 const cases = [
+  { name: '美瞳爱好者集合，新眼珠享新人生.html', raster: 0, images: 21, formulas: 0, captions: 0 },
+  { name: '细思极恐！为什么我们在三维空间里永远走不出镜像？.html', raster: 0, images: 3, formulas: 82, captions: 0 },
+  { name: '今年诺奖奖金又上涨了一百万？！发了125年，诺贝尔的钱为什么越花越多？.html', raster: 0, images: 13, formulas: 0, captions: 7 },
+  { name: '遍地开花的拼豆店，卖的竟是“诺奖物理”？（内附物理所拼豆图纸）.html', raster: 0, images: 26, formulas: 18, captions: 12 },
   { name: '不抽血不拍片，闻一闻就能接收身体警报？？？.html', tail: 'fu福li利shi时jian间', raster: 0, images: 3, formulas: 0, captions: 1 },
   { name: '为什么只睡20分钟，下午就能精神满满？_ No. 537.html', tail: '投票', raster: 8, images: 15, formulas: 14, captions: 0 },
-  { name: '你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html', tail: '上期回顾', raster: 2, images: 17, formulas: 11, captions: 4 },
+  { name: '你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html', tail: '上期回顾', raster: 1, images: 16, formulas: 11, captions: 4 },
   { name: '摸了半天找不到头，胶带却记得你撕到哪儿？.html', raster: 0, images: 12, formulas: 4, captions: 9 },
   { name: '要宣布翻篇了？那我磁化损失呢，厉娜.html', raster: 0, images: 21, formulas: 0, captions: 19 },
 ];
@@ -45,13 +49,15 @@ function sourceBaseline(html,sample){
     assert.equal(urls.length,5);
   }
   if(sample.name.includes('厉娜')) for(const [index,image] of [...retained.querySelectorAll('img')].entries()) if(!contentFigureIndices.includes(index))image.remove();
+  // Reviewed header assets 0–12: opening promotion, paper, clip, waves, leaves and flowers.
+  if(sample.name.includes('美瞳')) for(const [index,image] of [...retained.querySelectorAll('img')].entries()) if(index<=12)image.remove();
   return {body:retained,text:compact(retained.textContent),images:[...retained.querySelectorAll('img')].map(image=>image.getAttribute('data-src')||image.getAttribute('src')||'').filter(Boolean),formulas:formulaSources(retained),scripts:scriptSources(retained)};
 }
 
 function scriptText(latex){
   // In these fixtures a native script formula contains ordinary source text
   // plus its script. Explicit authored LaTeX is checked separately by identity.
-  return latex.replace(/\\color\{[^{}]*\}/g,'').replace(/\\(?:text|mathrm|mathbf|mathit|mathsf|mathtt)\b/g,'').replace(/[{}_^]/g,'').replace(/\\([%&#$])/g,'$1');
+  return latex.replace(/\\color\{[^{}]*\}/g,'').replace(/\\(?:text|mathrm|mathbf|boldsymbol|mathit|mathsf|mathtt)\b/g,'').replace(/[{}_^]/g,'').replace(/\\([%&#$])/g,'$1');
 }
 
 // Structural integration only: local HTML -> actual raster target selection ->
@@ -151,8 +157,8 @@ for (const sample of cases) {
     assertText(compact(representedText),baseline.text,'native words, captions, script text and recorded raster text jointly preserve the independent source text');
     if (sample.name.includes('正经玩')) {
       assert.equal(pictures.filter(p => p.url.endsWith('.gif')).length, 1);
-      assert.ok([...doc.querySelectorAll('[data-mock-original-text]')].some(image=>image.getAttribute('data-mock-original-text')==='实验器材'),'未知背景与完整标题都交给局部渲染，而非要求原生标题');
-      assert.deepEqual(pictures.map((p, index) => p.comment ? index : -1).filter(index => index >= 0), [0, 4, 13, 14]);
+      assert.ok(result.content.paragraphs.some(p=>p.text?.nodes.some(n=>n.word?.words==='实验器材')),'title remains native text');
+      assert.deepEqual(pictures.map((p, index) => p.comment ? index : -1).filter(index => index >= 0), [0, 3, 12, 13]);
       assert.deepEqual(pictures.filter(p => p.comment).map(p => p.comment), ['↑试图用肉眼看清手机屏幕像素的小编', '书籍是人类进步的阶梯（物理意义）', '半导体晶圆', '真实的X射线衍射点阵']);
     }
     if (sample.name.includes('No. 537')) {

@@ -23,6 +23,35 @@ document.querySelector('#run').onclick=async()=>{
       results.push(`通过：不同文案、配色与字号 ${title}`);
     }
     const blue=solidImage('#1144cc'), red=solidImage('#dd2244');
+    const label=cleanArticle(`<section style="display:flex"><section style="display:inline-block;width:auto;padding:13px 25px;background:url(${blue}) center/100% 100% no-repeat"><p style="color:#6ab3e0"><strong>未见过的带背景标题</strong></p></section></section><section style="display:flex"><section style="display:inline-block;width:100%;padding:20px;background:rgba(231,245,251,.55)"><p><strong>特征温度 T<sub>a</sub></strong></p><p>正文及 T<sub>b</sub></p></section></section>`);
+    const labelPrepared=await prepareForNative(label.html);
+    assert(label.stats.removedDecorativeBackgrounds===1&&label.stats.removedAnswerPanelBackgrounds===1,'清理标题贴图与纯文字面板底色');
+    assert(labelPrepared.rasterized===0,'标题和纯文字面板不应转图');
+    const labelNative=toOpus(labelPrepared.html,{document});
+    assert(!labelNative.blockingIssues.length,labelNative.blockingIssues.join(';'));
+    assert(labelNative.content.paragraphs.some(p=>p.text?.nodes?.some(n=>n.word?.words==='未见过的带背景标题')),'标题保留原生文字');
+    results.push('通过：带背景标题与文字面板保持原生');
+    const ribbon=cleanArticle(`<section style="display:flex"><section style="font-size:20px;background-color:#e7a240"><p><strong>新的器材标题</strong></p></section><section data-lazy-bgimg="${blue}" style="width:22px;height:28px;margin-top:-10px;background-color:#e7a240"><br></section></section>`);
+    const ribbonPrepared=await prepareForNative(ribbon.html);
+    assert(ribbon.stats.removedSmallDecorations===1&&ribbonPrepared.rasterized===0,'标题小饰片不应变成扁长图片');
+    assert(toOpus(ribbonPrepared.html,{document}).content.paragraphs.some(p=>p.text?.nodes.some(n=>n.word?.words==='新的器材标题')),'标题保留为原生文字');
+    results.push('通过：标题旁饰片清理，标题不转图');
+    for(const background of [
+      'linear-gradient(90deg,rgba(20,30,40,.03) 0%,transparent 12%) left top/24px 24px repeat,linear-gradient(360deg,rgba(20,30,40,.04) 0%,transparent 12%) left top/24px 24px repeat',
+      'linear-gradient(90deg,rgba(20,30,40,.05) 3%,transparent 3%) center/20px 20px no-repeat,linear-gradient(360deg,rgba(20,30,40,.05) 3%,transparent 3%) transparent'
+    ]){
+      const paper=cleanArticle(`<section style="background:${background}"><p>正文第一段</p><p>第二段 <span data-formula="x^2"></span></p><p><img src="${blue}"></p></section>`);
+      const preparedPaper=await prepareForNative(paper.html);
+      assert(paper.stats.removedDecorativeBackgrounds===1&&preparedPaper.rasterized===0,'纸纹不能使整篇正文转图');
+      assert(parse(preparedPaper.html).images.length===1&&parse(preparedPaper.html).querySelector('[data-formula="x^2"]'),'内容图片和公式完整保留');
+    }
+    results.push('通过：多层纸纹与默认背景尺寸保持正文原生');
+    const gif='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+    const animatedHeader=cleanArticle(`<p><img src="${gif}" data-type="gif" data-w="700" data-ratio="0.2"></p><section style="display:grid"><section style="grid-area:1/1"><div style="pointer-events:none;line-height:0"><img src="${gif}" data-type="gif"></div></section><section style="grid-area:1/1;font-size:32px;color:#354f80"><strong>新的展示标题</strong></section></section><p>实验正文</p><p><img src="${gif}" data-type="gif" alt="实验过程"></p>`);
+    const animatedPrepared=await prepareForNative(animatedHeader.html);
+    assert(animatedHeader.stats.removedDecorativeImages===2&&animatedPrepared.rasterized===0,'横幅与标题动效清理后不再触发静态截图');
+    assert(parse(animatedPrepared.html).images[0]?.src===gif&&animatedHeader.stats.gifs===1,'正文 GIF 地址保持原样');
+    results.push('通过：清理开头横幅与动效装饰，保留正文 GIF');
     const furniture=cleanArticle(`<header style="display:grid;grid-template-columns:100%"><section style="grid-area:1/1"><div style="pointer-events:none;line-height:0"><img src="${blue}" alt="图片"></div></section><section style="grid-area:1/1;color:#914532;font-size:35px"><strong>新的主题标题</strong></section></header><section style="display:flex"><div><div style="width:40px"><img src="${red}" alt="图片"></div></div><div style="font-size:20px"><strong>新的小标题</strong></div><div><div style="transform:scaleX(-1);width:40px"><img src="${red}" alt="图片"></div></div></section><p>正文配图保留</p><figure><img src="${blue}" alt="数据图"><figcaption>实验数据</figcaption></figure>`);
     assert(furniture.stats.removedDecorativeImages===3,'只清理标题的非交互拼贴和镜像边饰');
     const furnitureNative=await prepareForNative(furniture.html);
