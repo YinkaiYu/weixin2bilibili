@@ -378,3 +378,102 @@ test('recognizes independent captioned images in a shared section and lifts one-
   assert.equal(content.querySelectorAll('p > figure,span > figure').length,0);
   assert.equal(cleanArticle(result.html).html,result.html);
 });
+
+const reviewedCoverTestIds=["Q5JJsLWYMJUgWzYQ4YibDBNQnPvFy5a4tyzWtTELMFQhOQcHC8VhSt8dvdqc7XhQRibqcErGcdEyLKVQ9Ly057zDrBKgNfsNDFPu53zZyn0tE","Q5JJsLWYMJVib8nfqMDibiaiaoEEO2iaiaqO4Fric7nQCJCQxZUbXbaLibckEAT44TVdR297YYvGtSTQJ2bibSIpz83T2N6zxicEM8jp922M0z6tblpmk","Q5JJsLWYMJUXV0nNxkrHV5jARdynE0XodLyh1f1F0ZtQsDItzRXhBq4Bwl3PNiaCMxKt8ROAaibgDibW2Piby8MCmL2icsuuJkibVAKqBl2b8KZy4","Q5JJsLWYMJXgfaiarNOHWFD2zsarngWsCFSQ4XDIBicXvSjTnSaImLlPib5sicgSO7LmBwlU1YjdXSbqJK1BYQZHGsBHIKIR3fEyYAN5fB0WQTo","Q5JJsLWYMJVymW3L5EdOeQwJiaabS39CRr1xnGZuXBjmbeGicUtqFnj4U8icQeDAMk3HK6FlGDL2W41p06Dk7Oibkw75XVTjBRQlicfNItib7dmz0","Q5JJsLWYMJUibnCc0SwNCjZYDXpy9EJzD3FzXpiae39SJRagYNDtPbOGRQhQG0oKCibics9RChWv0GhPCKUW7ZsvQEwKiawp3xKeJ0w6QT2xFZVY","Q5JJsLWYMJUm2lZD0zJLVLXT6YnpYUicLTvxicCPK0YmurOMuzMV40m0uaMRW0JOwJwd2sa2qt6ZDVTtjGia4iaiciaTwoNiaJPNLh8l4DN0IAkRYE","Q5JJsLWYMJV30mwjicRXXnzVpRcUFzGYegcVh7vnwPF31picqUxskCrxwXibx8rXKCtjSn9ofcHCA1QKDSL5rPhESLE7OJuqYrr0JKVyM5K10E","Q5JJsLWYMJWS9l5PL5eGAPTnia3lpNDckFzicXGYQHWB7bDlfOUzrIic0TaCUmdaoIRBIQgEj3TyP6fJKHNxB8jicmcS7cHWaoSRahzZ1kdzn6I","Q5JJsLWYMJUHCcBRrQVjricwZNiaVyzrkEEWOAwWPLw1KrVAE0X5R0BibGWoT8qeRTVzTWoWqgXFff7WbYSeav5I5nuZ65qM3mVduLUvULILic8","Q5JJsLWYMJUe6LrN9E3rx3LPXkZDK4J9RibicOGtN2WOWUV5l6ofOvBiaDuDD9vNAqRmJdfKZSAmOQasXYb91SqjmYnyy5mGwt1ibr7DSmmQWSA","Q5JJsLWYMJXD5snfggprIKX1n4cH9mm5na9Wkxf7t7zeAu8gF3ciaic3oPP1HmUoeGibHjLaevBlVpKvr1h9JhoLRd0HcSfgOrgecXibQVbpDk8","Q5JJsLWYMJWvkatACDQ06oBFkWIqST12ZHYe1icsf3tuesNJK0FDKKZXDPpcn6nyDWVqadL7kXziaos0WzSch9ZTteCZvjcATic7Uh8ia6V2Cvc","Q5JJsLWYMJX8YjXmljjRVAJplicrgdg4R2DSP4Z8wSibPMiaOcPRIsPxo4X222dqicaxCIAdN8XLHY1ylQQfynSlOCTJrW4nAXF1HHm2cucXndk"];
+
+function reviewedCoverFixture(ids=reviewedCoverTestIds) {
+  const layers=ids.map(id=>'<section style="grid-column-start:1;grid-row-start:1"><img alt="图片" data-src="https://mmbiz.qpic.cn/mmbiz_png/'+id+'/640?wx_fmt=png"></section>').join('');
+  const text=['标题一','标题二','标题三'].map(t=>'<section style="grid-column-start:1;grid-row-start:1;font-weight:bold;color:#8a4400">'+t+'</section>').join('');
+  return '<section style="display:grid;grid-template-columns:100%;grid-template-rows:100%">'+layers+text+'<section style="padding-top:124.63%"></section></section>';
+}
+const ornamentBranchFixture=width=>'<section><section style="width:'+width+'px"><img alt="图片" style="width:'+width+'px" src="https://mmbiz.qpic.cn/ornament.png"></section></section>';
+
+test('omits only the reviewed cover template and its verified chapter and paired heading ornament roles',()=>{
+  const chapter='<section style="display:flex">'+ornamentBranchFixture(58)+'<section>PART 01章节标题</section></section>';
+  const paired='<section style="display:flex">'+ornamentBranchFixture(34)+'<section>中间标题</section>'+ornamentBranchFixture(34)+'</section>';
+  const content='<p><img src="https://mmbiz.qpic.cn/chart.png"></p><p><img width="34" src="https://mmbiz.qpic.cn/tiny-real.png"></p><p><img data-formula="x^2" src="https://mmbiz.qpic.cn/formula.png"></p>';
+  const result=cleanArticle(reviewedCoverFixture()+chapter+paired+content), d=doc(result.html);
+  assert.equal(result.stats.removedDecorativeImages,17);
+  assert.deepEqual(result.removedDecorativeImages.map(x=>x.imageIndex),Array.from({length:17},(_,i)=>i));
+  assert.deepEqual(result.removedDecorativeImages.slice(14).map(x=>x.reason),['reviewed-chapter-badge','reviewed-paired-heading-ornament','reviewed-paired-heading-ornament']);
+  assert.equal(d.images.length,3);
+  assert.ok(d.querySelector('img[data-formula]'));
+  assert.equal(d.body.textContent,'标题一标题二标题三PART 01章节标题中间标题');
+  assert.equal(cleanArticle(result.html).html,result.html);
+});
+
+test('retains unknown collage images and small illustrations outside the reviewed template',()=>{
+  const unknown=[...reviewedCoverTestIds];unknown[5]='unknown-real-content';
+  const chapter='<section style="display:flex">'+ornamentBranchFixture(58)+'<section>PART 01章节标题</section></section>';
+  const result=cleanArticle(reviewedCoverFixture(unknown)+chapter);
+  assert.equal(result.stats.removedDecorativeImages,0);
+  assert.equal(result.stats.images,15);
+  const formula=cleanArticle(reviewedCoverFixture()+chapter.replace('alt="图片"','data-formula="x^2"'));
+  assert.equal(formula.stats.removedDecorativeImages,14);
+  assert.equal(formula.stats.formulas,1);
+  for(const attribute of ['class="formula"','class="latex"','data-type="latex"']) {
+    const semantic=cleanArticle(reviewedCoverFixture()+chapter.replace('alt="图片"',`${attribute} alt="图片"`));
+    assert.equal(semantic.stats.removedDecorativeImages,14,attribute);
+    assert.equal(doc(semantic.html).images.length,1,attribute);
+  }
+});
+
+test('flattens verified horizontal character cards into one editable title while retaining emphasis and color',()=>{
+  const card=(pinyin,char)=>'<section style="display:inline-block">'+pinyin+'<section style="width:40px;height:40px;border:1px solid #aaa"><p><strong style="font-size:20px;color:#fe9c00">'+char+'</strong></p></section></section>';
+  const result=cleanArticle('<section>'+card('fu','福')+card('li','利')+card('shi','时')+card('jian','间')+'</section>');
+  const d=doc(result.html);
+  assert.equal(result.stats.flattenedCharacterHeadings,1);
+  assert.equal(d.body.textContent,'福利时间');
+  assert.equal(d.querySelectorAll('p').length,1);
+  assert.ok([...d.querySelectorAll('span')].every(s=>s.style.fontWeight==='bold'&&s.style.color==='rgb(254, 156, 0)'));
+  assert.equal(cleanArticle(result.html).html,result.html);
+  const ordinary=cleanArticle('<section><section style="display:inline-block"><p>科学文章正文</p></section><section style="display:inline-block"><p>另一段正文</p></section></section>');
+  assert.equal(ordinary.stats.flattenedCharacterHeadings,0);
+  assert.equal(doc(ordinary.html).querySelectorAll('p').length,2);
+});
+
+test('retains solid background shorthands consistently with equivalent expanded longhands',()=>{
+  const short=cleanArticle('<section style="background:white"><p style="background:rgb(252,248,243)">F<sub>peak</sub></p></section>');
+  const expanded=cleanArticle('<section style="background-color:white"><p style="background-color:rgb(252,248,243)">F<sub>peak</sub></p></section>');
+  assert.equal(short.html,expanded.html);
+  assert.equal(doc(short.html).querySelector('p').style.backgroundColor,'rgb(252, 248, 243)');
+  const withImage=cleanArticle('<p style="background:#ffeeaa url(https://mmbiz.qpic.cn/unknown.png)">内容</p>');
+  assert.equal(doc(withImage.html).querySelector('p').style.backgroundColor,'rgb(255, 238, 170)');
+  assert.equal(withImage.stats.backgrounds,1);
+});
+
+test('removes only reviewed answer-panel backdrops while preserving native formula and inline highlights',()=>{
+  const panelStyle='background:rgb(239,239,246);color:rgb(62,62,62);font-weight:400;border:2px solid #2e3191;border-radius:6px;padding:10px;margin:20px 0';
+  const result=cleanArticle(`<section style="${panelStyle}"><span>答：</span><p>正文 x<sup>2</sup><span style="background:initial">透明继承</span></p><p><span style="background:red;color:white">保留文字高亮</span><span data-formula="E=mc^2"></span></p></section>`);
+  const d=doc(result.html);
+  assert.equal(result.stats.removedAnswerPanelBackgrounds,1);
+  assert.equal(d.querySelector('section').style.backgroundColor,'');
+  assert.equal(d.querySelector('sup').textContent,'2');
+  assert.equal(d.querySelector('[data-formula]').getAttribute('data-formula'),'E=mc^2');
+  assert.ok([...d.querySelectorAll('span')].some(s=>s.style.backgroundColor==='red'&&s.style.color==='white'));
+  assert.equal(cleanArticle(result.html).html,result.html);
+  const protectedText=cleanArticle(`<section style="${panelStyle}"><span>答：</span><p style="color:white">白字正文</p><p>下一段</p></section>`);
+  assert.equal(protectedText.stats.removedAnswerPanelBackgrounds,0);
+  const other=cleanArticle(`<section style="${panelStyle}"><p>问答导航</p><p>下一题</p></section><section style="background:rgb(252,248,243)"><p>F<sub>peak</sub></p></section><section style="background:#ae430e;color:white">白字棕底标题</section>`);
+  assert.equal(other.stats.removedAnswerPanelBackgrounds,0);
+  assert.deepEqual([...doc(other.html).querySelectorAll('section')].map(s=>s.style.backgroundColor),['rgb(239, 239, 246)','rgb(252, 248, 243)','rgb(174, 67, 14)']);
+});
+
+test('removes the reviewed tape formula card decoration without flattening its colored editable formula',()=>{
+  const style='text-align:center;background:rgb(252,248,243);border:1px solid rgb(233,219,207);border-radius:10px;padding:18px 12px;color:rgb(130,66,46);font-size:20px';
+  const html=`<section style="${style}">ΔF =<i>F</i><sub>peak</sub>−<i>F</i><sub>baseline</sub></section>`;
+  const result=cleanArticle(html), card=doc(result.html).querySelector('section');
+  assert.equal(result.stats.removedFormulaCardDecorations,1);
+  assert.equal(card.style.backgroundColor,'');
+  assert.equal(card.style.border,'');
+  assert.equal(card.style.borderRadius,'');
+  assert.equal(card.style.fontSize,'20px');
+  assert.equal(card.style.color,'rgb(130, 66, 46)');
+  assert.equal(card.style.textAlign,'center');
+  assert.equal(card.querySelectorAll('i').length,2);
+  assert.deepEqual([...card.querySelectorAll('sub')].map(s=>s.textContent),['peak','baseline']);
+  assert.equal(cleanArticle(result.html).html,result.html);
+  assert.equal(cleanArticle(html.replace('ΔF','ΔE')).stats.removedFormulaCardDecorations,0);
+  const highlight=cleanArticle(html.replace('<i>F</i>','<i style="background:yellow">F</i>'));
+  assert.equal(doc(highlight.html).querySelector('i').style.backgroundColor,'yellow');
+});

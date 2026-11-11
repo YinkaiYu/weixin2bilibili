@@ -26,6 +26,11 @@ function reconstruct(){
   assert.equal(lazyBackgrounds.length,1);
   assert.equal(lazyBackgrounds[0].parentElement.textContent.trim(),'实验器材');
   lazyBackgrounds[0].removeAttribute('data-lazy-bgimg');
+  // The historical JSDOM cleanup omitted background shorthands. Freeze that
+  // old input explicitly; current production cleanup retains their solid color.
+  for(const element of historicalSource.window.document.querySelectorAll('#js_content [style]')) {
+    if(Array.from(element.style).includes('background'))element.style.removeProperty('background');
+  }
   const article=parseArticle(historicalSource.serialize(),{document});
   const draft=JSON.parse(fs.readFileSync(draftPath,'utf8'));
   const doc=new document.defaultView.DOMParser().parseFromString(article.html,'text/html');
@@ -35,6 +40,21 @@ function reconstruct(){
   assert.equal(doc.querySelectorAll('figcaption').length,4);
   for(const caption of [...doc.querySelectorAll('figcaption')])caption.replaceWith(...caption.childNodes);
   for(const figure of [...doc.querySelectorAll('figure')])figure.replaceWith(...figure.childNodes);
+  // That converter also encoded a block's ordinary white page background as
+  // per-word white highlights. Re-express that historical source treatment as
+  // explicit inline highlights, without copying anything from the saved draft.
+  const walker=doc.createTreeWalker(doc.body,4),whiteText=[];
+  while(walker.nextNode()) {
+    const text=walker.currentNode;if(!text.textContent.trim())continue;
+    for(let parent=text.parentElement;parent;parent=parent.parentElement){
+      const background=parent.style?.backgroundColor;
+      if(!background||['transparent','initial','unset','inherit'].includes(background))continue;
+      if(background==='rgb(255, 255, 255)'||background==='white')whiteText.push(text);
+      break;
+    }
+  }
+  assert.ok(whiteText.length>0,'历史源输入含有白底文字');
+  for(const text of whiteText){const span=doc.createElement('span');span.style.backgroundColor='#ffffff';text.replaceWith(span);span.append(text);}
   const targets=findRasterTargets(doc);
   assert.equal(targets.length,1);
   assert.ok(targets[0].querySelector('img[src*="Yellowdog.png"]'));

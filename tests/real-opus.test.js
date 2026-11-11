@@ -15,7 +15,7 @@ const cases = [
   { name: '为什么只睡20分钟，下午就能精神满满？_ No. 537.html', raster: 0, images: 9, formulas: 26, captions: 3 },
   { name: '你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html', raster: 1, images: 16, formulas: 11, captions: 4 },
   { name: '摸了半天找不到头，胶带却记得你撕到哪儿？.html', raster: 0, images: 12, formulas: 4, captions: 9 },
-  { name: '要宣布翻篇了？那我磁化损失呢，厉娜.html', raster: 0, images: 64, formulas: 0, captions: 19 },
+  { name: '要宣布翻篇了？那我磁化损失呢，厉娜.html', raster: 0, images: 21, formulas: 0, captions: 19 },
 ];
 
 // Structural integration only: local HTML -> actual raster target selection ->
@@ -28,6 +28,21 @@ for (const sample of cases) {
     const doc = new document.defaultView.DOMParser().parseFromString(source.html, 'text/html');
     const targets = findRasterTargets(doc);
     assert.equal(targets.length, sample.raster);
+    if (sample.name.includes('胶带')) {
+      const card = [...doc.querySelectorAll('section')].find(el => el.textContent.replace(/\s+/g, '') === 'ΔF=Fpeak−Fbaseline');
+      assert.ok(card, '公式文字所在段落必须保留');
+      assert.equal(card.style.backgroundColor, '', '已确认的公式卡片容器底色可省');
+      assert.equal(card.style.borderTopWidth, '', '已确认的公式卡片装饰边框可省');
+      assert.equal(card.style.color, 'rgb(130, 66, 46)', '公式文字颜色不能丢');
+      assert.deepEqual([...card.querySelectorAll('sub')].map(el => el.textContent), ['peak','baseline']);
+      assert.equal([...doc.querySelectorAll('sub')].filter(el => !card.contains(el)).length, 2, '正文两个下标保留原生');
+    }
+    if (sample.name.includes('厉娜')) {
+      const retained = [...doc.images].map(img => Number(new URL(img.src).hash.match(/imgIndex=(\d+)/)?.[1]));
+      assert.deepEqual(retained, [14,16,19,23,26,27,30,31,32,35,37,40,43,44,46,49,50,53,57,60,63], '只移除已核验的模板装饰；内容图及原 46/63 两张无图注配图必须保留');
+      for (const title of ['都重新见面了怎么还没和好？','从《后会友期》看物理','外场变了，过去还算数']) assert.ok(doc.body.textContent.includes(title), '海报文字保留');
+      assert.ok(doc.body.textContent.includes('τ ≈ τ₀ · exp(ΔE / kBT)'), 'Unicode 正文公式不因装饰清理被删');
+    }
     const originalImages = [...doc.images];
     const originalFormulaRoots = [...doc.querySelectorAll('[data-formula],[data-latex]')].filter(el => !el.parentElement.closest('[data-formula],[data-latex]'));
     const nativeFormulaSources = originalFormulaRoots.filter(el => !targets.some(t => t.contains(el))).map(el => el.getAttribute('data-formula') || el.getAttribute('data-latex'));

@@ -4,6 +4,8 @@
   "localAssetResolution": "Match sourceUrl to selected File using localPath relative to the saved HTML folder. data-src remains the original remote URL; localasset:/// + encodeURIComponent(localPath) is used only when no remote image source exists. Read image bytes and substitute an object/data URL for preview, then upload original bytes. Do not infer resource mapping by filename alone.",
   "backgroundExtraction": "Content-first cleanup resolves WeChat lazy background metadata before classification. Small empty decorations up to 48×48px are omitted; question/answer labels and short headings with proven small tiles retain native editable text. Text-only cards with explicit small repeated texture omit only the image layer when effective text colors remain readable against retained solid backgrounds. Unknown or potentially informative backgrounds remain marked for local rendering. In these five private samples, the 20×25px 正经玩 decoration, all Q1–Q12 backgrounds, and the 翻译专栏 interaction-card texture are omitted; source content images, formulas, superscripts, subscripts, bold and text colors remain.",
   "captionExtraction": "Recognizes only the immediately following standalone text leaf with effective 9–15px type and muted gray color (mean RGB 90–190, channel spread at most 40). Retains the complete caption node and inherited semantic styling inside figure/figcaption; existing captions are preserved. Does not cross body paragraphs, choose a single image within a same-paragraph image group, move entire multi-paragraph sections, or absorb heading/credit/disclaimer blocks. The shared upper/lower-image caption in the translation sample stays body text. Bilibili native comment eligibility, the 100-character limit and formatting fallback are checked separately by the native converter.",
+  "reviewedOrnaments": "The 厉娜 template is recognized only by the reviewed 14 ornament asset identities and its exact overlapping-grid structure. Its 14 decorative cover layers, five 58px chapter badges, and twelve pairs of 34px heading ornaments are omitted after role checks; all three cover text layers, five chapter headings, 19 captioned images and the two other content images remain. Unknown collages and unrelated small images are retained. The 翻译专栏 four horizontal Chinese character cards become one editable 福利时间 heading, omitting their decorative pinyin and boxes. No other sample loses images under these rules.",
+  "reviewedAnswerPanels": "Only the 12 verified multi-paragraph answer panels beginning 答： with the matching pale background, blue border, radius and spacing omit their container backdrop after per-text contrast checks. The one reviewed tape ΔF = Fpeak − Fbaseline formula card also omits its cream backdrop and border after matching formula structure, colors, spacing and contrast. Its brown text, italics and subscripts remain native. Inline highlights, navigation blocks, unknown colored cards and white-on-brown headings retain their backgrounds. Background shorthand solid colors are explicitly preserved before this classification so local tests match Chromium.",
   "articles": [
     {
       "file": "不抽血不拍片，闻一闻就能接收身体警报？？？.html",
@@ -19,14 +21,18 @@
       },
       "retained": {
         "removedLinks": 1,
-        "removedEmptyBlocks": 149,
+        "removedEmptyBlocks": 57,
         "removedImagePlaceholders": 0,
-        "removedEmptySvg": 24,
+        "removedEmptySvg": 0,
         "removedTransparentBackgrounds": 0,
         "removedDecorativeBackgrounds": 1,
         "removedSmallDecorations": 0,
         "removedHiddenElements": 1,
         "trimmedTail": 1,
+        "removedDecorativeImages": 0,
+        "flattenedCharacterHeadings": 1,
+        "removedAnswerPanelBackgrounds": 0,
+        "removedFormulaCardDecorations": 0,
         "images": 4,
         "gifs": 0,
         "formulas": 0,
@@ -35,9 +41,10 @@
         "subscripts": 0,
         "captions": 1
       },
+      "removedDecorativeImages": [],
       "formatting": {
         "boldNodes": 67,
-        "coloredNodes": 163,
+        "coloredNodes": 159,
         "colors": [
           "rgb(172, 57, 255)",
           "rgb(249, 110, 87)",
@@ -49,7 +56,6 @@
           "rgb(62, 62, 62)",
           "black",
           "rgb(255, 255, 255)",
-          "rgb(254, 188, 0)",
           "rgb(254, 156, 0)",
           "rgb(122, 79, 214)",
           "rgb(255, 104, 39)",
@@ -67,6 +73,7 @@
       ],
       "blockingIssues": [],
       "warnings": [
+        "已将横排单字装饰标题整理为一行文字，省略字卡和拼音装饰。",
         "已删除回顾／近期热门文章标题及其后面的内容。",
         "已将 1 处图片下方的灰色小字识别为图注。",
         "已清除 1 处外链（保留链接文字和图片）。",
@@ -97,6 +104,10 @@
         "removedSmallDecorations": 0,
         "removedHiddenElements": 1,
         "trimmedTail": 1,
+        "removedDecorativeImages": 0,
+        "flattenedCharacterHeadings": 0,
+        "removedAnswerPanelBackgrounds": 12,
+        "removedFormulaCardDecorations": 0,
         "images": 9,
         "gifs": 0,
         "formulas": 7,
@@ -105,6 +116,7 @@
         "subscripts": 0,
         "captions": 4
       },
+      "removedDecorativeImages": [],
       "formatting": {
         "boldNodes": 174,
         "coloredNodes": 337,
@@ -153,6 +165,7 @@
       ],
       "blockingIssues": [],
       "warnings": [
+        "已略去 12 处问答面板的装饰底色，保留正文、公式和文字高亮。",
         "已删除回顾／近期热门文章标题及其后面的内容。",
         "已将 3 处图片下方的灰色小字识别为图注。",
         "已清除 12 处外链（保留链接文字和图片）。",
@@ -190,6 +203,10 @@
         "removedSmallDecorations": 1,
         "removedHiddenElements": 1,
         "trimmedTail": 1,
+        "removedDecorativeImages": 0,
+        "flattenedCharacterHeadings": 0,
+        "removedAnswerPanelBackgrounds": 0,
+        "removedFormulaCardDecorations": 0,
         "images": 16,
         "gifs": 1,
         "formulas": 4,
@@ -198,6 +215,7 @@
         "subscripts": 7,
         "captions": 4
       },
+      "removedDecorativeImages": [],
       "formatting": {
         "boldNodes": 38,
         "coloredNodes": 51,
@@ -278,6 +296,10 @@
         "removedSmallDecorations": 0,
         "removedHiddenElements": 1,
         "trimmedTail": 1,
+        "removedDecorativeImages": 0,
+        "flattenedCharacterHeadings": 0,
+        "removedAnswerPanelBackgrounds": 0,
+        "removedFormulaCardDecorations": 1,
         "images": 12,
         "gifs": 0,
         "formulas": 0,
@@ -286,6 +308,7 @@
         "subscripts": 4,
         "captions": 9
       },
+      "removedDecorativeImages": [],
       "formatting": {
         "boldNodes": 37,
         "coloredNodes": 90,
@@ -347,6 +370,7 @@
       ],
       "blockingIssues": [],
       "warnings": [
+        "已略去已确认公式卡片的装饰底色和边框，保留公式文字、颜色和上下标。",
         "已删除回顾／近期热门文章标题及其后面的内容。",
         "已将 9 处图片下方的灰色小字识别为图注。"
       ],
@@ -378,15 +402,19 @@
       },
       "retained": {
         "removedLinks": 0,
-        "removedEmptyBlocks": 273,
+        "removedEmptyBlocks": 272,
         "removedImagePlaceholders": 0,
-        "removedEmptySvg": 15,
+        "removedEmptySvg": 14,
         "removedTransparentBackgrounds": 0,
         "removedDecorativeBackgrounds": 0,
         "removedSmallDecorations": 0,
         "removedHiddenElements": 1,
         "trimmedTail": 1,
-        "images": 64,
+        "removedDecorativeImages": 43,
+        "flattenedCharacterHeadings": 0,
+        "removedAnswerPanelBackgrounds": 0,
+        "removedFormulaCardDecorations": 0,
+        "images": 21,
         "gifs": 0,
         "formulas": 0,
         "backgrounds": 0,
@@ -394,6 +422,223 @@
         "subscripts": 0,
         "captions": 19
       },
+      "removedDecorativeImages": [
+        {
+          "imageIndex": 0,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJUgWzYQ4YibDBNQnPvFy5a4tyzWtTELMFQhOQcHC8VhSt8dvdqc7XhQRibqcErGcdEyLKVQ9Ly057zDrBKgNfsNDFPu53zZyn0tE/640?wx_fmt=png&from=appmsg#imgIndex=0",
+          "reason": "reviewed-cover-ornament"
+        },
+        {
+          "imageIndex": 1,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJVib8nfqMDibiaiaoEEO2iaiaqO4Fric7nQCJCQxZUbXbaLibckEAT44TVdR297YYvGtSTQJ2bibSIpz83T2N6zxicEM8jp922M0z6tblpmk/640?wx_fmt=png&from=appmsg#imgIndex=1",
+          "reason": "reviewed-cover-ornament"
+        },
+        {
+          "imageIndex": 2,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJUXV0nNxkrHV5jARdynE0XodLyh1f1F0ZtQsDItzRXhBq4Bwl3PNiaCMxKt8ROAaibgDibW2Piby8MCmL2icsuuJkibVAKqBl2b8KZy4/640?wx_fmt=png&from=appmsg#imgIndex=2",
+          "reason": "reviewed-cover-ornament"
+        },
+        {
+          "imageIndex": 3,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJXgfaiarNOHWFD2zsarngWsCFSQ4XDIBicXvSjTnSaImLlPib5sicgSO7LmBwlU1YjdXSbqJK1BYQZHGsBHIKIR3fEyYAN5fB0WQTo/640?wx_fmt=png&from=appmsg#imgIndex=3",
+          "reason": "reviewed-cover-ornament"
+        },
+        {
+          "imageIndex": 4,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJVymW3L5EdOeQwJiaabS39CRr1xnGZuXBjmbeGicUtqFnj4U8icQeDAMk3HK6FlGDL2W41p06Dk7Oibkw75XVTjBRQlicfNItib7dmz0/640?wx_fmt=png&from=appmsg#imgIndex=4",
+          "reason": "reviewed-cover-ornament"
+        },
+        {
+          "imageIndex": 5,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJUibnCc0SwNCjZYDXpy9EJzD3FzXpiae39SJRagYNDtPbOGRQhQG0oKCibics9RChWv0GhPCKUW7ZsvQEwKiawp3xKeJ0w6QT2xFZVY/640?wx_fmt=png&from=appmsg#imgIndex=5",
+          "reason": "reviewed-cover-ornament"
+        },
+        {
+          "imageIndex": 6,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJUm2lZD0zJLVLXT6YnpYUicLTvxicCPK0YmurOMuzMV40m0uaMRW0JOwJwd2sa2qt6ZDVTtjGia4iaiciaTwoNiaJPNLh8l4DN0IAkRYE/640?wx_fmt=png&from=appmsg#imgIndex=6",
+          "reason": "reviewed-cover-ornament"
+        },
+        {
+          "imageIndex": 7,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJV30mwjicRXXnzVpRcUFzGYegcVh7vnwPF31picqUxskCrxwXibx8rXKCtjSn9ofcHCA1QKDSL5rPhESLE7OJuqYrr0JKVyM5K10E/640?wx_fmt=png&from=appmsg#imgIndex=7",
+          "reason": "reviewed-cover-ornament"
+        },
+        {
+          "imageIndex": 8,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJWS9l5PL5eGAPTnia3lpNDckFzicXGYQHWB7bDlfOUzrIic0TaCUmdaoIRBIQgEj3TyP6fJKHNxB8jicmcS7cHWaoSRahzZ1kdzn6I/640?wx_fmt=png&from=appmsg#imgIndex=8",
+          "reason": "reviewed-cover-ornament"
+        },
+        {
+          "imageIndex": 9,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJUHCcBRrQVjricwZNiaVyzrkEEWOAwWPLw1KrVAE0X5R0BibGWoT8qeRTVzTWoWqgXFff7WbYSeav5I5nuZ65qM3mVduLUvULILic8/640?wx_fmt=png&from=appmsg#imgIndex=9",
+          "reason": "reviewed-cover-ornament"
+        },
+        {
+          "imageIndex": 10,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJUe6LrN9E3rx3LPXkZDK4J9RibicOGtN2WOWUV5l6ofOvBiaDuDD9vNAqRmJdfKZSAmOQasXYb91SqjmYnyy5mGwt1ibr7DSmmQWSA/640?wx_fmt=png&from=appmsg#imgIndex=10",
+          "reason": "reviewed-cover-ornament"
+        },
+        {
+          "imageIndex": 11,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJXD5snfggprIKX1n4cH9mm5na9Wkxf7t7zeAu8gF3ciaic3oPP1HmUoeGibHjLaevBlVpKvr1h9JhoLRd0HcSfgOrgecXibQVbpDk8/640?wx_fmt=png&from=appmsg#imgIndex=11",
+          "reason": "reviewed-cover-ornament"
+        },
+        {
+          "imageIndex": 12,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJWvkatACDQ06oBFkWIqST12ZHYe1icsf3tuesNJK0FDKKZXDPpcn6nyDWVqadL7kXziaos0WzSch9ZTteCZvjcATic7Uh8ia6V2Cvc/640?wx_fmt=png&from=appmsg#imgIndex=12",
+          "reason": "reviewed-cover-ornament"
+        },
+        {
+          "imageIndex": 13,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJX8YjXmljjRVAJplicrgdg4R2DSP4Z8wSibPMiaOcPRIsPxo4X222dqicaxCIAdN8XLHY1ylQQfynSlOCTJrW4nAXF1HHm2cucXndk/640?wx_fmt=png&from=appmsg#imgIndex=13",
+          "reason": "reviewed-cover-ornament"
+        },
+        {
+          "imageIndex": 15,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJXMn4jygGJynEKaWuyQReBib35bTl7iame49nWfDUSxBZicvkz0l5rn0p010U8jZRB6TDwEcqp68vks3YAhicZkmnFFkO1ibfd5NhXE/640?wx_fmt=png&from=appmsg#imgIndex=15",
+          "reason": "reviewed-chapter-badge"
+        },
+        {
+          "imageIndex": 17,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJXiby11icFiaTj9DJOlNEiby7uhgLCcZL25E0JS03By3ic60xRldEiaPNbO5IAFLws6WM20a6RdasgiaAby9HrmJkQYcE2NnUUwN7gxrk/640?wx_fmt=png&from=appmsg#imgIndex=17",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 18,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJVgxcuZfEicTofhAsiaynw0CeN1LeCYh9euSRaAPL4iaaVU6r7icCJNVRMeN7VLhPjwNgEM4hmqvRU21LoDETQ2M3B40nyRRRaiczzs/640?wx_fmt=png&from=appmsg#imgIndex=18",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 20,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJUylcA1vrcZMEiasP6e2EOL6IicPESpfjIqAWGwa996DFibcPVbKvEyQyfazIbET7pmxz5cKNpStQ2I4ibtcTbpM9WdJLdTJiauSjp0/640?wx_fmt=png&from=appmsg#imgIndex=20",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 21,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJXibR2J9ibKMKic6GicicZXlsTz79tevz7N81BeNRPErLxvUauwkD1gFd32bfVWZlocT0OPM6h6H6FN4oJUIVAS9ZTVlBMl4Iv0EnwY/640?wx_fmt=png&from=appmsg#imgIndex=21",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 22,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJVHcyagbAMzQtGiaHqENXh5pia1icAI4ibOnvchTJg9tKzp2Um0FRJG5TZw7TMbBxW2WibGSe56YXTL4HdHONXFYKHT3MCJvPtJDO4M/640?wx_fmt=png&from=appmsg#imgIndex=22",
+          "reason": "reviewed-chapter-badge"
+        },
+        {
+          "imageIndex": 24,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJXYZdbqj4PgibBdKcAGEc21uZVWGBXibDqIJEAp0NCW7aicMiaX5E3ic75qlG65hX5c6VNvnECcrHw5fVzy2nAm2gib9xyNzV0Cc4o1Q/640?wx_fmt=png&from=appmsg#imgIndex=24",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 25,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJXBAdibobXHgibtSymxrvRicjPNsVibOsSj1brYOKZib4LH4ZldBoqv0qybKUJD6QFrvWhR4eOBtWYpWVZe6Taodoux0ID7upv3MHyM/640?wx_fmt=png&from=appmsg#imgIndex=25",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 28,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJVJPkTZhEcicdtmWtX8BoV7hvqkDxIibOOvADYicVgq9MnugoXCj8hybNz3jQCrPEiaoTRJ37Tgb9lVTWTPY0TK2PGQHS4YnZo2iaXY/640?wx_fmt=png&from=appmsg#imgIndex=28",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 29,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJVogdCC6v27C5zJ4mvIAJjpcUYca6pJNWlWUmRYwy9ouktib7rgia3J6y0peSpRNsz8GoPwuMYcDqZCg8n1P6lkk45AGF3wPicMkE/640?wx_fmt=png&from=appmsg#imgIndex=29",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 33,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJXKPImzGmSjCbw7WkiafmbjUkHjaOGJoBBpoe7wotQVFNiaNsJFW2uOBhW3PRgJEuqArUY7vI9FL01Hnatn5XnJLY6v9CQ0jo4tg/640?wx_fmt=png&from=appmsg#imgIndex=33",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 34,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJU9jEd3TfaNS4wXnajqv8fD8nPw8uYDsox9LfywQ14NB5iaZ3YJ9OTwUUWuwTyQRsvibwUicicncWpdkIadZMMDvVicBrohEAAhccMQ/640?wx_fmt=png&from=appmsg#imgIndex=34",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 36,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJVUrBvNhJd5viayO5D7hpXQatKouibpb5qvLR5C2EuQkFsAiah8bBqlqzaXnVRvaCpuicX9ibRhybCKGWZJs9eG11s3xicA2BvKsPkBQ/640?wx_fmt=png&from=appmsg#imgIndex=36",
+          "reason": "reviewed-chapter-badge"
+        },
+        {
+          "imageIndex": 38,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJVbdVvoEZDX36HhcpWo251PiatKsNMf28tAxhZg8syPpmrtvhGXrlnALraxEvoPFUNWGrx8VbAjCeYO4iccubCrzVdAGAEM9TjK8/640?wx_fmt=png&from=appmsg#imgIndex=38",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 39,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJVRgmibWVYP8Nia0TYYhB06XiaX3AC69JZAkca5dFVaoEqxfS3Owfcx9LAXRHRtHj9nYKVibmWbxJc5DRnE0TjahsnicDyibicvXqFmm8/640?wx_fmt=png&from=appmsg#imgIndex=39",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 41,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJW4fjnzDZrrMkaaWdhsIibCPjJfzMpbUtuIIwnicnQ1lju4ibZicibZB4LYQ5nxkrD3uYwLZ9yMlZ39opzpkRDuM3vxj8Y5pyv3mI24/640?wx_fmt=png&from=appmsg#imgIndex=41",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 42,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJWTpvibRR9FPCDRzibksIGLjU1lI4IT6ZQGQNvyg2JR8mGxuARuPyfwzpV3mPBmPvNOoSbjg8F6PuE2hHBia9OG9fE6mlozMDSug8/640?wx_fmt=png&from=appmsg#imgIndex=42",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 45,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJUadH3icmmGcJ1ZzrwFiaIqMqLGydfEW1kVKrMSRoLz5lwYZjd5DcRNYI9quF1mmwc1uufKTJRv0V6YaIz1dnU9EbxjKjsZMHdwI/640?wx_fmt=png&from=appmsg#imgIndex=45",
+          "reason": "reviewed-chapter-badge"
+        },
+        {
+          "imageIndex": 47,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJXnqt3jcDTG8CFtqiadayUYanukemmcMNvzgWraP8Sf2hAlCP0myFvyXD7DMhwbU80B8Cqqe4XvnzqrQYeiaqRQgP1YBXfj7xFVY/640?wx_fmt=png&from=appmsg#imgIndex=47",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 48,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJUDIr6JzicYyicx0bhswtJ2LURjCBl9kLdcoKyib49h4v0MHt1cSicyRAyQicwK2SnjBNDMtmLs87iaib2ZKr6767oAQWiaibDZ8UJk7xN4/640?wx_fmt=png&from=appmsg#imgIndex=48",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 51,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJV3ppR0mAhAX1QKQkbEq5c7jkJ9jJT7UQt12H5ic2W74megorHd6UXD3d9rl8ZSjUEE4mY6lqU5iaVjC1pUOIRg6ibWGU27CAFJbo/640?wx_fmt=png&from=appmsg#imgIndex=51",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 52,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJXO4lzrK4gj4ib3Byp7dtyUjxs7GWrupONpiaQ1rmCcERz75JNBCxGPVNKcTowVJg3eIN3cGfjAZESRu55F9MKq9iaGkwmwBKaKJE/640?wx_fmt=png&from=appmsg#imgIndex=52",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 54,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJXpvBJRaHaMRNFdg7byzyojBYNVvHH8icF3MXqw5YcRRlI4yweibAT03yX0VZomeL6vFd1lRfHmA53dZom6z0yHKOTLaHiawba2S8/640?wx_fmt=png&from=appmsg#imgIndex=54",
+          "reason": "reviewed-chapter-badge"
+        },
+        {
+          "imageIndex": 55,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJVLNCUBFggIXmNAvIDP87L4SN0iavHbT1iaSJWb8PNDx4GESZPA6FL3Ql7FWb4Ox5FJkRJ26rVOupx0F5BNhmk12KZjnZnrbNEvo/640?wx_fmt=png&from=appmsg#imgIndex=55",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 56,
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJVHabYOBEFET4mF66KcpgctxB5Pca29llK8fEWDiaqurrAVLp43oFOtfBnsxEibB7arruyAzYLKCM6jmLpHibOLIck6SAyuhLqW0A/640?wx_fmt=png&from=appmsg#imgIndex=56",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 58,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJVuSibK1cfia4lKpRSJCjbHKo4MvsCamHLVkyAoLe9JYx6wYFxZnoMAXawFeZEh7LUY6j1cEYEfSCS325qnmt4SGkFgtA72pn1MQ/640?wx_fmt=png&from=appmsg#imgIndex=58",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 59,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJWk820RYNdMbiamVrarZ1micdbichsIiaHsb9ustbCjaTgSibbfw71QADWTwgvc8zGGsT4cHsAFccXcw8U6wzy0N5HQTcwEq0JKJnMs/640?wx_fmt=png&from=appmsg#imgIndex=59",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 61,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJXIS1VRURUHficFBYUAARUT1eSrppVTrmkRMuowB6sasJBtz2b1icUkqZWySkrgmyapnudSQ5zobFI927bdHDPRy4yhxE2IPER2k/640?wx_fmt=png&from=appmsg#imgIndex=61",
+          "reason": "reviewed-paired-heading-ornament"
+        },
+        {
+          "imageIndex": 62,
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJU6O5tvTm0tGyGyca6ibv6th4ib09q6NibapjjdAaDJRXFeP9ibMZWvrepaibfoQk0NhkFibsghJBQDGgPrYH4P02BbrhpibItJgGgN4A/640?wx_fmt=png&from=appmsg#imgIndex=62",
+          "reason": "reviewed-paired-heading-ornament"
+        }
+      ],
       "formatting": {
         "boldNodes": 94,
         "coloredNodes": 185,
@@ -414,178 +659,108 @@
       },
       "captions": [
         {
-          "imageIndex": 14,
+          "imageIndex": 0,
           "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJXrPu6derHCpAjGdydwia6vWMWLNSjYicWcNgww8odofOHXOOOTqR3tzHGVfaicBsKzsO2U0icS0xNQ2yprgFNrp8QibcICysv2DRrc/640?wx_fmt=png&from=appmsg#imgIndex=14",
           "text": "图1｜“流放明早九点还要继续”的实物版。图源：网友二创，原作者见图内水印"
         },
         {
-          "imageIndex": 16,
+          "imageIndex": 1,
           "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJU1lzvmiaFRVjjXERNL6sXMp8oj8GmgUvSY3la7YSIoBW0XyIur28cAjnkLBGtalyDJVqgcKoXYJrfmdnxSZxibjwMOsLQCib5mvs/640?wx_fmt=jpeg&from=appmsg#imgIndex=16",
           "text": "图2｜许飞回忆当年一起吃零食的习惯。图源：芒果tv"
         },
         {
-          "imageIndex": 19,
+          "imageIndex": 2,
           "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJV2SQtOtQTkiaFVmDXsdsUvSJSiaSZicypM8jnIkcfhiarXm8HaPZI2ebwBAzlkw2I2S5oDThyO0VbSv5WEFJneibyJgsvDGdEuOysE/640?wx_fmt=jpeg#imgIndex=19",
           "text": "图3｜同样是 H＝0，内部磁化可以不同"
         },
         {
-          "imageIndex": 23,
+          "imageIndex": 3,
           "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJXqJnJDnVdia8dlr8SuggyOBBTYTZX7QYib4dg1s7Mw7wC1ZNYX6yKyAwxFacNx5ydasrhsiaCAqjE0M3HibVPDBRxic1UbtL5KYubM/640?wx_fmt=jpeg&from=appmsg#imgIndex=23",
           "text": "图4｜网友先把“牢”画出来了。接下来看看，没有栅栏时，材料还能怎样被困住。图源：水印"
         },
         {
-          "imageIndex": 26,
+          "imageIndex": 4,
           "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJW1QLQQossQFBd3MMSoOsR2PaRX2ICdMkoxIedNiaFWP1bFgOHNAmVyaINJqdlwQvdhd7kBEmv1L2Z61ic0ccoIUfBAiabxxwd724/640?wx_fmt=png&from=appmsg#imgIndex=26",
           "text": "图5 | 紫色、橙色路径表示失败的尝试，蓝色路径表示成功越过能垒。"
         },
         {
-          "imageIndex": 27,
+          "imageIndex": 5,
           "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJUia1tVQUIXGcvscgkKaJtKicM5icXjvw0u4E895GwbDLP0QrE3crlTvgicp5HdGaEUWvAjjmbjc7yUrVccM2PHhafUhiaH4icD1OOj0/640?wx_fmt=jpeg#imgIndex=27",
           "text": "图6｜相邻状态能量更低，也得先越过门槛。外场既会改变谷底的高低，也会改变能垒。"
         },
         {
-          "imageIndex": 30,
+          "imageIndex": 6,
           "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJU1ut8oJ3DzUhT7FF41JcHJFAJduwOkpIS2iaQYN00UkDY3LIbAvl4y0z0Dsp2xvwP7DHvnebMDuAuCuXJ71P9mcEQM2FkK8VM0/640?wx_fmt=png&from=appmsg#imgIndex=30",
           "text": "图7｜畴壁里不是突然换向。上图（Néel壁）在图面内逐渐转过，下图（Bloch壁）还经过垂直图面的方向。图源：[13]"
         },
         {
-          "imageIndex": 31,
+          "imageIndex": 7,
           "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJVWxL3hicibebZWR3FhsPOjwnJFVToiak1unjSL84rLSwto5W1SwzL2bIsRZ6Ar9msYYMnZvsqDxWdtTnZjUtcyHqleYR34QnY4vY/640?wx_fmt=png&from=appmsg#imgIndex=31",
           "text": "有门，但卡住了..."
         },
         {
-          "imageIndex": 32,
+          "imageIndex": 8,
           "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJXyNAfQAnLc3pU1mslEaT3mKoHYJROaHw9LfXiaMn1cgqkxw1sGE1qb9JP8almR2RAviaeraaibHsA7S087u7M05f9wYAaUIJvAFk/640?wx_fmt=jpeg#imgIndex=32",
           "text": "图8｜先弯曲，再越过缺陷"
         },
         {
-          "imageIndex": 35,
+          "imageIndex": 9,
           "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJVtFbnZtqD5T3cOVObnR4ibib5EWy3Wic93QT566bATC2XHywT1ial39hNAeJicxRD1TSrtcvd7jg8oyo3ibn20cltmwQQasweVyj3Zk/640?wx_fmt=png&from=appmsg#imgIndex=35",
           "text": "图9｜磁化的跳跃可以“听”出来：线圈检测磁通变化，信号经放大器送到扬声器。"
         },
         {
-          "imageIndex": 37,
+          "imageIndex": 10,
           "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJWfGYzklAIp17e3VdIibsWsztcTgtXdib6jXSQNXwQeZcuH0awX8Lb0iaURcsABn0ajaibvJkk5B4rPR4Pje7CaYn56bmCJMntLlS8/640?wx_fmt=png&from=appmsg#imgIndex=37",
           "text": "图10｜网友据《后会友期》画面二创。图源网络"
         },
         {
-          "imageIndex": 40,
+          "imageIndex": 11,
           "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJUZmqpmmewrX56Y60JXBlf988opibZfDMN6Du3Riay1PPChaIcMic6dnBOJPAZWDLUANmcObEaficQQzKbCzZ15OQql8pfDSToBiajE/640?wx_fmt=jpeg#imgIndex=40",
           "text": "图11｜B→C→B：在具有回点记忆的体系中，回到转向点，还能接回原来的支路。"
         },
         {
-          "imageIndex": 43,
+          "imageIndex": 12,
           "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJXRnGMNmg1sicf6ypUOibnckdzKIf6rc8RbDbXmp6CT3TI6j3b4htZ3uIv3ekjGE9FPWls7TbKyNvDrdKSyoVLYgQxxpGEqhppuc/640?wx_fmt=jpeg&from=appmsg#imgIndex=43",
           "text": "图12｜这次纵轴换成了磁感应强度B。在正文所述测量条件下，回线面积对应单位体积每循环耗能。图源：Stanford Magnets"
         },
         {
-          "imageIndex": 44,
+          "imageIndex": 13,
           "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJVFNIrtQDpPicnMPkBJn6hWu3HFAORDdypEeHa3xAN4r5eKPfBoqYtuEt6O9pia0O0nrVXlSIH7j0OfomrhC9bm7DRR3JRjNX36Q/640?wx_fmt=png&from=appmsg#imgIndex=44",
           "text": "图13｜聊了好几轮以后。图源网络。"
         },
         {
-          "imageIndex": 49,
+          "imageIndex": 15,
           "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJU4GNEWHSSPxNFXfof5enibMFmDCHPiaf0riaLKFNtZHx7Dribn1VaGupdcvJibsLstMtgIyB9iapU6Uiclxau2UH9uAcNLNa3LicZsdmg/640?wx_fmt=jpeg#imgIndex=49",
           "text": "图14｜正文公式中的ΔE，在这张图中记作E_B：从谷底到能量峰的差，才是翻转需要跨过的门槛。图源：[14]"
         },
         {
-          "imageIndex": 50,
+          "imageIndex": 16,
           "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJWJowONO6yAMpiciaFFcFd3Dm1MPicqh15A1yVoXo7un3icgNuKJptdZtcrmrwHU6tPFiaVibs7Xysh28lUFOc5oQFfRtMyQjqKjCmR8/640?wx_fmt=png&from=appmsg#imgIndex=50",
           "text": "图15｜实测例子：固定反向外场后，钕铁硼磁体的磁极化 J（与 M 成正比）仍继续减小。横轴为对数时间；圆点是测量值，虚线是对数段拟合。图源：[11]"
         },
         {
-          "imageIndex": 53,
+          "imageIndex": 17,
           "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJXiaUss1NibNPon7taicz1cswxDhDhud4L4LNROoPENmBgD8Muxllv64h0RHzV5VjGIL4vt6zwz6yeVuaYCrmibdTSuCMcOjQJmxkQ/640?wx_fmt=png&from=appmsg#imgIndex=53",
           "text": "图16｜Kovacs“驼峰”的模拟例子：一些经历不同等待过程的曲线先升后降。横轴为对数时间，纵轴为体积；关注虚线右侧的后续演化。图源：[12]"
         },
         {
-          "imageIndex": 57,
+          "imageIndex": 18,
           "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJWOfcNP95evNRHVX1jFsdWVjLIdhzCNFeea2JhJUUwQXew3GiarCLES5SQO2DQPvV9T5v3lKvaEQQ6PqovRvE7qE3pBOqx0iby7A/640?wx_fmt=jpeg&from=appmsg#imgIndex=57",
           "text": "图17｜给自己一点发出普通问候的勇气。"
         },
         {
-          "imageIndex": 60,
+          "imageIndex": 19,
           "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJWIicNkVz6PNZp8W3WCj90Y1YOBzrqsoqCJ4Sga1JiajXOBuJDfxibtibfwJyP9iategFQpZ9x7JayRSwsR5VEL9uD7w4HPR9lFyXH8/640?wx_fmt=jpeg&from=appmsg#imgIndex=60",
           "text": "图18｜“只是因为我愿意，和她一起浪费时间。”一起相处，本身也可以是一件具体的小事。"
         }
       ],
       "blockingIssues": [],
       "warnings": [
+        "已略去 43 张已确认的模板装饰图，保留标题和正文配图。",
         "已删除回顾／近期热门文章标题及其后面的内容。",
         "已将 19 处图片下方的灰色小字识别为图注。"
       ],
-      "localAssets": [
-        {
-          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJUgWzYQ4YibDBNQnPvFy5a4tyzWtTELMFQhOQcHC8VhSt8dvdqc7XhQRibqcErGcdEyLKVQ9Ly057zDrBKgNfsNDFPu53zZyn0tE/640?wx_fmt=png&from=appmsg#imgIndex=0",
-          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640",
-          "available": true
-        },
-        {
-          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJVib8nfqMDibiaiaoEEO2iaiaqO4Fric7nQCJCQxZUbXbaLibckEAT44TVdR297YYvGtSTQJ2bibSIpz83T2N6zxicEM8jp922M0z6tblpmk/640?wx_fmt=png&from=appmsg#imgIndex=1",
-          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(1)",
-          "available": true
-        },
-        {
-          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJUXV0nNxkrHV5jARdynE0XodLyh1f1F0ZtQsDItzRXhBq4Bwl3PNiaCMxKt8ROAaibgDibW2Piby8MCmL2icsuuJkibVAKqBl2b8KZy4/640?wx_fmt=png&from=appmsg#imgIndex=2",
-          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(2)",
-          "available": true
-        },
-        {
-          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJXgfaiarNOHWFD2zsarngWsCFSQ4XDIBicXvSjTnSaImLlPib5sicgSO7LmBwlU1YjdXSbqJK1BYQZHGsBHIKIR3fEyYAN5fB0WQTo/640?wx_fmt=png&from=appmsg#imgIndex=3",
-          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(3)",
-          "available": true
-        },
-        {
-          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJVymW3L5EdOeQwJiaabS39CRr1xnGZuXBjmbeGicUtqFnj4U8icQeDAMk3HK6FlGDL2W41p06Dk7Oibkw75XVTjBRQlicfNItib7dmz0/640?wx_fmt=png&from=appmsg#imgIndex=4",
-          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(4)",
-          "available": true
-        },
-        {
-          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJUibnCc0SwNCjZYDXpy9EJzD3FzXpiae39SJRagYNDtPbOGRQhQG0oKCibics9RChWv0GhPCKUW7ZsvQEwKiawp3xKeJ0w6QT2xFZVY/640?wx_fmt=png&from=appmsg#imgIndex=5",
-          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(5)",
-          "available": true
-        },
-        {
-          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJUm2lZD0zJLVLXT6YnpYUicLTvxicCPK0YmurOMuzMV40m0uaMRW0JOwJwd2sa2qt6ZDVTtjGia4iaiciaTwoNiaJPNLh8l4DN0IAkRYE/640?wx_fmt=png&from=appmsg#imgIndex=6",
-          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(6)",
-          "available": true
-        },
-        {
-          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJV30mwjicRXXnzVpRcUFzGYegcVh7vnwPF31picqUxskCrxwXibx8rXKCtjSn9ofcHCA1QKDSL5rPhESLE7OJuqYrr0JKVyM5K10E/640?wx_fmt=png&from=appmsg#imgIndex=7",
-          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(7)",
-          "available": true
-        },
-        {
-          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJWS9l5PL5eGAPTnia3lpNDckFzicXGYQHWB7bDlfOUzrIic0TaCUmdaoIRBIQgEj3TyP6fJKHNxB8jicmcS7cHWaoSRahzZ1kdzn6I/640?wx_fmt=png&from=appmsg#imgIndex=8",
-          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(8)",
-          "available": true
-        },
-        {
-          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJUHCcBRrQVjricwZNiaVyzrkEEWOAwWPLw1KrVAE0X5R0BibGWoT8qeRTVzTWoWqgXFff7WbYSeav5I5nuZ65qM3mVduLUvULILic8/640?wx_fmt=png&from=appmsg#imgIndex=9",
-          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(9)",
-          "available": true
-        },
-        {
-          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJUe6LrN9E3rx3LPXkZDK4J9RibicOGtN2WOWUV5l6ofOvBiaDuDD9vNAqRmJdfKZSAmOQasXYb91SqjmYnyy5mGwt1ibr7DSmmQWSA/640?wx_fmt=png&from=appmsg#imgIndex=10",
-          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(10)",
-          "available": true
-        },
-        {
-          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJXD5snfggprIKX1n4cH9mm5na9Wkxf7t7zeAu8gF3ciaic3oPP1HmUoeGibHjLaevBlVpKvr1h9JhoLRd0HcSfgOrgecXibQVbpDk8/640?wx_fmt=png&from=appmsg#imgIndex=11",
-          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(11)",
-          "available": true
-        },
-        {
-          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJWvkatACDQ06oBFkWIqST12ZHYe1icsf3tuesNJK0FDKKZXDPpcn6nyDWVqadL7kXziaos0WzSch9ZTteCZvjcATic7Uh8ia6V2Cvc/640?wx_fmt=png&from=appmsg#imgIndex=12",
-          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(12)",
-          "available": true
-        },
-        {
-          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJX8YjXmljjRVAJplicrgdg4R2DSP4Z8wSibPMiaOcPRIsPxo4X222dqicaxCIAdN8XLHY1ylQQfynSlOCTJrW4nAXF1HHm2cucXndk/640?wx_fmt=png&from=appmsg#imgIndex=13",
-          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(13)",
-          "available": true
-        }
-      ],
+      "localAssets": [],
       "backgrounds": []
     }
   ]

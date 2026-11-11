@@ -306,3 +306,28 @@ test('blocks strike or background on an absorbed base instead of dropping it or 
     assert.ok(formulas(r).every(x=>!x.includes('\\cancel')));
   }
 });
+
+test('keeps native scripts and formulas on ordinary inherited white page backgrounds', () => {
+  const r = convert('<section style="background:rgb(255,255,255)"><p>F<sub>peak</sub> 和 F<sub>baseline</sub></p><section style="background-color:white"><span data-formula="x^2"></span></section></section>');
+  assert.deepEqual(r.blockingIssues, []);
+  assert.deepEqual(formulas(r), ['\\text{F}_{\\text{peak}}', '\\text{F}_{\\text{baseline}}', 'x^2']);
+  assert.ok(words(r).every(word => !word.bg_style), '页面白底不能误作每个文字的局部高亮');
+});
+
+test('does not mistake local white highlights or a white box over a colored surface for the page background', () => {
+  const htmls = [
+    '<p><span style="background-color:white">x</span><sup>2</sup></p>',
+    '<p>x<sup style="background-color:white">2</sup></p>',
+    '<section style="background-color:#ffdd00"><p style="background-color:white">x<sup>2</sup></p></section>',
+    '<section style="background-color:#ffdd00"><p style="background-color:transparent">x<sup>2</sup></p></section>',
+    '<p><span style="background-color:white" data-formula="x^2"></span></p>',
+  ];
+  for (const html of htmls) assert.ok(convert(html).blockingIssues.some(issue => issue.includes('背景色')), html);
+});
+
+test('preserves a real tinted formula card as an explicit unsupported background instead of erasing it', () => {
+  const r = convert('<section style="background-color:#ffffff"><section style="background-color:rgb(252,248,243);color:rgb(130,66,46)">ΔF = F<sub>peak</sub> − F<sub>baseline</sub></section><p>F<sub>peak</sub> 是峰值</p></section>');
+  assert.ok(r.blockingIssues.some(issue => issue.includes('背景色')));
+  assert.ok(words(r).some(word => word.bg_style?.color?.color === '#fcf8f3'));
+  assert.ok(formulas(r).at(-1).includes('peak'), '白色页面上的正文上下标仍可保留原生');
+});

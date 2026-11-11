@@ -16,7 +16,7 @@ const expectations = [
   {file:'为什么只睡20分钟，下午就能精神满满？_ No. 537.html', collection:'问答', images:9, gifs:0, formulas:7, superscripts:19, subscripts:0, backgrounds:0, captions:4},
   {file:'你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html', collection:'正经玩', images:16, gifs:1, formulas:4, superscripts:0, subscripts:7, backgrounds:0, captions:4},
   {file:'摸了半天找不到头，胶带却记得你撕到哪儿？.html', collection:'线上科学日', images:12, gifs:0, formulas:0, superscripts:0, subscripts:4, backgrounds:0, captions:9},
-  {file:'要宣布翻篇了？那我磁化损失呢，厉娜.html', collection:'线上科学日', images:64, gifs:0, formulas:0, superscripts:0, subscripts:0, backgrounds:0, captions:19},
+  {file:'要宣布翻篇了？那我磁化损失呢，厉娜.html', collection:'线上科学日', images:21, gifs:0, formulas:0, superscripts:0, subscripts:0, backgrounds:0, captions:19},
 ];
 const entries = [];
 
@@ -44,6 +44,7 @@ for (const expected of expectations) {
       coverUrl:parsed.coverUrl, collectionNames:parsed.collectionNames,
       source:{imageElements:originalImages.length,imagesWithRemoteDataSrc:originalImages.filter(img=>/^https?:\/\//.test(img.getAttribute('data-src') || '')).length},
       retained:parsed.stats,
+      removedDecorativeImages:parsed.removedDecorativeImages,
       formatting:{boldNodes:boldNodes.length,coloredNodes:coloredNodes.length,colors:[...new Set(coloredNodes.map(node=>node.style.color))],formulas},
       captions:[...cleanedDocument.querySelectorAll('figure > figcaption')].map(caption=>{
         const image=caption.parentElement.querySelector('img');
@@ -74,7 +75,30 @@ for (const expected of expectations) {
       const labels=[...document.querySelectorAll('span')].map(node=>node.textContent.trim());
       for (let n=1;n<=12;n++) assert.ok(labels.includes(`Q${n}`),`editable Q${n} label`);
       assert.equal(parsed.stats.removedDecorativeBackgrounds,12);
+      assert.equal(parsed.stats.removedAnswerPanelBackgrounds,12);
+      assert.ok([...document.querySelectorAll('section')].filter(node=>/^答[：:]/.test(node.textContent.replace(/\s/g,''))).every(node=>node.style.backgroundColor!=='rgb(239, 239, 246)'));
     }
+    else assert.equal(parsed.stats.removedAnswerPanelBackgrounds,0);
+    if(expected.file.startsWith('摸了')) {
+      assert.equal(parsed.stats.removedFormulaCardDecorations,1);
+      const card=[...document.querySelectorAll('section')].find(node=>node.textContent.replace(/\s/g,'')==='ΔF=Fpeak−Fbaseline');
+      assert.ok(card);
+      assert.equal(card.style.backgroundColor,'');
+      assert.equal(card.style.border,'');
+      assert.equal(card.style.color,'rgb(130, 66, 46)');
+      assert.equal(card.querySelectorAll('sub').length,2);
+    } else assert.equal(parsed.stats.removedFormulaCardDecorations,0);
+    if (expected.collection==='翻译专栏') {
+      assert.equal(parsed.stats.flattenedCharacterHeadings,1);
+      assert.ok([...document.querySelectorAll('p')].some(p=>p.textContent==='福利时间'));
+    }
+    if (expected.file.includes('厉娜')) {
+      const indices=parsed.removedDecorativeImages.map(item=>item.imageIndex);
+      assert.deepEqual(indices,[0,1,2,3,4,5,6,7,8,9,10,11,12,13,15,17,18,20,21,22,24,25,28,29,33,34,36,38,39,41,42,45,47,48,51,52,54,55,56,58,59,61,62]);
+      assert.equal(parsed.stats.removedDecorativeImages,43);
+      for (const text of ['都重新见面了怎么还没和好？','从《后会友期》看物理','外场变了，过去还算数','还买鸭舌呢，外场早变了','“画地为牢”，这个牢为什么出不去','弹幕都在劝，怎么又说回去了','油烟扇走了，旧事还在后台','所以，下一次开口能做什么']) assert.ok(document.body.textContent.includes(text),text);
+      for(const index of [46,63]) assert.ok([...document.images].some(img=>img.getAttribute('src').endsWith(`#imgIndex=${index}`)),`content image ${index}`);
+    } else assert.equal(parsed.stats.removedDecorativeImages,0);
     if (expected.collection==='正经玩') {
       assert.equal(parsed.coverUrl,'https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJWOFjB3xPPD8kc4xhicGDkmqHVZUuicHQP65XJwUSZcTuZ9CJyAa3j6KjUCw70phMYIIBI1HbxYTotSz3o86TCY3EfZgazCScdg0/0?wx_fmt=jpeg');
       assert.deepEqual([...document.querySelectorAll('figure > figcaption')].map(caption=>({imageIndex:[...document.images].indexOf(caption.parentElement.querySelector('img')),text:caption.textContent.trim()})),[
@@ -96,6 +120,8 @@ if (process.env.WRITE_ARTICLE_AUDIT === '1') {
     localAssetResolution:'Match sourceUrl to selected File using localPath relative to the saved HTML folder. data-src remains the original remote URL; localasset:/// + encodeURIComponent(localPath) is used only when no remote image source exists. Read image bytes and substitute an object/data URL for preview, then upload original bytes. Do not infer resource mapping by filename alone.',
     backgroundExtraction:'Content-first cleanup resolves WeChat lazy background metadata before classification. Small empty decorations up to 48×48px are omitted; question/answer labels and short headings with proven small tiles retain native editable text. Text-only cards with explicit small repeated texture omit only the image layer when effective text colors remain readable against retained solid backgrounds. Unknown or potentially informative backgrounds remain marked for local rendering. In these five private samples, the 20×25px 正经玩 decoration, all Q1–Q12 backgrounds, and the 翻译专栏 interaction-card texture are omitted; source content images, formulas, superscripts, subscripts, bold and text colors remain.',
     captionExtraction:'Recognizes only the immediately following standalone text leaf with effective 9–15px type and muted gray color (mean RGB 90–190, channel spread at most 40). Retains the complete caption node and inherited semantic styling inside figure/figcaption; existing captions are preserved. Does not cross body paragraphs, choose a single image within a same-paragraph image group, move entire multi-paragraph sections, or absorb heading/credit/disclaimer blocks. The shared upper/lower-image caption in the translation sample stays body text. Bilibili native comment eligibility, the 100-character limit and formatting fallback are checked separately by the native converter.',
+    reviewedOrnaments:'The 厉娜 template is recognized only by the reviewed 14 ornament asset identities and its exact overlapping-grid structure. Its 14 decorative cover layers, five 58px chapter badges, and twelve pairs of 34px heading ornaments are omitted after role checks; all three cover text layers, five chapter headings, 19 captioned images and the two other content images remain. Unknown collages and unrelated small images are retained. The 翻译专栏 four horizontal Chinese character cards become one editable 福利时间 heading, omitting their decorative pinyin and boxes. No other sample loses images under these rules.',
+    reviewedAnswerPanels:'Only the 12 verified multi-paragraph answer panels beginning 答： with the matching pale background, blue border, radius and spacing omit their container backdrop after per-text contrast checks. The one reviewed tape ΔF = Fpeak − Fbaseline formula card also omits its cream backdrop and border after matching formula structure, colors, spacing and contrast. Its brown text, italics and subscripts remain native. Inline highlights, navigation blocks, unknown colored cards and white-on-brown headings retain their backgrounds. Background shorthand solid colors are explicitly preserved before this classification so local tests match Chromium.',
     articles:entries,
   },null,2)+'\n');
 }

@@ -46,7 +46,13 @@ function stylesFor(el, parent) {
     style.strikethrough = decoration.includes('line-through');
   }
   if (css.color && css.color !== 'inherit') style.color = colorValue(css.color);
-  if (css.backgroundColor && css.backgroundColor !== 'inherit') style.background = css.backgroundColor === 'transparent' || /^rgba\([^)]*,\s*0\s*\)$/i.test(css.backgroundColor) ? '' : colorValue(css.backgroundColor);
+  if (css.backgroundColor && !['inherit','initial','unset','transparent'].includes(css.backgroundColor) && !/^rgba\([^)]*,\s*0\s*\)$/i.test(css.backgroundColor)) {
+    style.background = colorValue(css.backgroundColor);
+    // A block's white paper on the default/white page is not an inline
+    // highlight. Keep the provenance: a white span, or white over a colored
+    // ancestor, is meaningful styling and must not be silently discarded.
+    style.pageBackground = /^(?:#ffffff|white)$/i.test(style.background) && BLOCK.has(tag) && (!parent.background || parent.pageBackground);
+  }
   const font = String(css.fontSize || '').match(/^([\d.]+)(px|pt|em|rem|%)$/i);
   if (font) {
     const n = Number(font[1]);
@@ -73,7 +79,7 @@ function wordNode(text, style) {
     ...nativeColor(style.color),
     style: Object.fromEntries(['bold', 'italic', 'strikethrough', 'underline'].filter(k => style[k]).map(k => [k, true]))
   };
-  if (style.background) word.bg_style = { style: 1, color: nativeColor(style.background) };
+  if (style.background && !style.pageBackground) word.bg_style = { style: 1, color: nativeColor(style.background) };
   return { node_type: 1, word };
 }
 
@@ -200,7 +206,7 @@ export function toOpus(html, { images = new Map(), document: owner } = {}) {
 
   function checkScriptStyle(style) {
     if (style.color && !safeLatexColor(style.color)) issue('上下标或其基底的半透明、特殊颜色无法表示为有效 LaTeX 颜色，请将这个局部保留为图片或调整颜色。');
-    if (style.background) issue('上下标或其基底带背景色，暂不能完整映射到 B 站原生公式，请将这个局部保留为图片或调整样式。');
+    if (style.background && !style.pageBackground) issue('上下标或其基底带背景色，暂不能完整映射到 B 站原生公式，请将这个局部保留为图片或调整样式。');
     // TeX \\cancel draws a diagonal slash, which is not an HTML horizontal strike.
     // Do not silently substitute a different decoration.
     if (style.strikethrough) issue('上下标或其基底带删除线，暂不能完整映射到 B 站原生公式，请将这个局部保留为图片或调整样式。');
@@ -362,7 +368,7 @@ export function toOpus(html, { images = new Map(), document: owner } = {}) {
         stats.formulas++;
         if (node.tagName === 'IMG') stats.formulaImages++;
         summaryParts.push(node.getAttribute('alt') || latex);
-        if (childStyle.background || childStyle.strikethrough) issue('公式带有背景色或删除线，暂不能完整映射到 B 站原生公式，请处理后重试。');
+        if ((childStyle.background && !childStyle.pageBackground) || childStyle.strikethrough) issue('公式带有背景色或删除线，暂不能完整映射到 B 站原生公式，请处理后重试。');
         return;
       }
       if (UNSUPPORTED.has(node.tagName.toUpperCase()) || node.hasAttribute('data-wb-unsupported') || node.hasAttribute('data-sync-unsupported')) {

@@ -1,4 +1,5 @@
 /** Article extraction and loss-aware cleanup. No requests or page scripts are executed. */
+import {scriptAlbumTitles} from './source-metadata.js';
 const HTML_TAGS = new Set('p div section article main header footer figure figcaption span strong b em i u s strike del sup sub br hr img h1 h2 h3 h4 h5 h6 ul ol li blockquote pre code table thead tbody tfoot tr td th caption colgroup col'.split(' '));
 const SVG_TAGS = new Set('svg g path rect circle ellipse line polyline polygon text tspan defs clippath mask lineargradient radialgradient stop title desc'.split(' '));
 const MATH_TAGS = new Set('math mrow mi mn mo mtext mspace ms mfrac msqrt mroot msub msup msubsup munder mover munderover mtable mtr mtd mfenced menclose semantics annotation'.split(' '));
@@ -98,7 +99,7 @@ function blend(foreground, background) {
   return foreground.slice(0,3).map((channel,index)=>channel*foreground[3]+background[index]*(1-foreground[3])).concat(1);
 }
 
-function textReadableWithoutImage(element) {
+function textReadableWithoutImage(element, omittedSolidBackground = null) {
   const walker = element.ownerDocument.createTreeWalker(element,4);
   while (walker.nextNode()) {
     const text = walker.currentNode;
@@ -109,8 +110,8 @@ function textReadableWithoutImage(element) {
     for (const ancestor of ancestors) {
       const color = ancestor.style?.color;
       if (color && !['inherit','currentcolor'].includes(color.toLowerCase())) foreground=cssColor(color);
-      const solid = ancestor.style?.backgroundColor;
-      if (solid && solid!=='inherit') {
+      const solid = ancestor===omittedSolidBackground?'':ancestor.style?.backgroundColor;
+      if (solid && !['inherit','initial','unset'].includes(solid.toLowerCase())) {
         const parsed=cssColor(solid);
         if (!parsed) return false;
         background=blend(parsed,background);
@@ -157,6 +158,140 @@ function clearDecorativeBackground(element) {
   element.removeAttribute('data-lazy-bgimg');
   element.removeAttribute('data-sync-background-url');
   if (element.getAttribute('data-sync-unsupported')==='CSS 背景图') element.removeAttribute('data-sync-unsupported');
+}
+
+function clearReviewedAnswerPanelBackgrounds(body) {
+  let removed=0;
+  const isColor=(value,r,g,b)=>{const color=cssColor(value);return color&&color[0]===r&&color[1]===g&&color[2]===b&&color[3]===1;};
+  for(const panel of body.querySelectorAll('section')) {
+    const css=panel.style;
+    // This reviewed question/answer template uses a pale decorative container
+    // around several ordinary paragraphs. Do not generalize to inline highlights,
+    // independent formula cards or white text supported by a colored heading.
+    if(!/^答[:：]/.test(normalizedText(panel.textContent)) || panel.querySelectorAll('p,ol,ul').length<2) continue;
+    if(!isColor(css.backgroundColor,239,239,246) || !isColor(css.color,62,62,62) || css.fontWeight!=='400') continue;
+    if(css.borderRadius!=='6px' || css.padding!=='10px' || css.marginTop!=='20px' || css.marginBottom!=='20px' || css.marginLeft!=='0px' || css.marginRight!=='0px') continue;
+    if(['Top','Right','Bottom','Left'].some(side=>css[`border${side}Width`]!=='2px'||css[`border${side}Style`]!=='solid'||!isColor(css[`border${side}Color`],46,49,145))) continue;
+    if(css.backgroundImage && css.backgroundImage!=='none' || panel.hasAttribute('data-lazy-bgimg') || panel.hasAttribute('data-sync-background-url')) continue;
+    if(!textReadableWithoutImage(panel,panel)) continue;
+    css.removeProperty('background');css.removeProperty('background-color');removed++;
+  }
+  return removed;
+}
+
+function clearReviewedFormulaCardDecorations(body) {
+  let removed=0;
+  const isColor=(value,r,g,b)=>{const color=cssColor(value);return color&&color[0]===r&&color[1]===g&&color[2]===b&&color[3]===1;};
+  for(const card of body.querySelectorAll('section')) {
+    const css=card.style, scripts=[...card.querySelectorAll('sub')];
+    // This reviewed formula's two subscripts and brown text remain native. The
+    // cream card and border are decoration; unknown colored cards stay intact.
+    if(normalizedText(card.textContent)!=='ΔF=Fpeak−Fbaseline' || scripts.length!==2 || scripts[0].textContent!=='peak' || scripts[1].textContent!=='baseline') continue;
+    if(card.querySelector('img,svg,math,table,[data-formula],[data-latex]') || css.backgroundImage && css.backgroundImage!=='none') continue;
+    if(!isColor(css.backgroundColor,252,248,243) || !isColor(css.color,130,66,46) || css.fontSize!=='20px' || css.textAlign!=='center' || css.borderRadius!=='10px' || css.padding!=='18px 12px') continue;
+    if(['Top','Right','Bottom','Left'].some(side=>css[`border${side}Width`]!=='1px'||css[`border${side}Style`]!=='solid'||!isColor(css[`border${side}Color`],233,219,207))) continue;
+    if(!textReadableWithoutImage(card,card)) continue;
+    css.removeProperty('background');css.removeProperty('background-color');
+    for(const property of Array.from(css)) if(property==='border'||property.startsWith('border-')) css.removeProperty(property);
+    removed++;
+  }
+  return removed;
+}
+
+// Reviewed template assets: transparent leaves, dots and brush shapes only.
+// Identity plus structure is required; unknown collages are never deleted.
+const REVIEWED_COVER_ORNAMENTS = new Set([
+  "Q5JJsLWYMJUgWzYQ4YibDBNQnPvFy5a4tyzWtTELMFQhOQcHC8VhSt8dvdqc7XhQRibqcErGcdEyLKVQ9Ly057zDrBKgNfsNDFPu53zZyn0tE",
+  "Q5JJsLWYMJVib8nfqMDibiaiaoEEO2iaiaqO4Fric7nQCJCQxZUbXbaLibckEAT44TVdR297YYvGtSTQJ2bibSIpz83T2N6zxicEM8jp922M0z6tblpmk",
+  "Q5JJsLWYMJUXV0nNxkrHV5jARdynE0XodLyh1f1F0ZtQsDItzRXhBq4Bwl3PNiaCMxKt8ROAaibgDibW2Piby8MCmL2icsuuJkibVAKqBl2b8KZy4",
+  "Q5JJsLWYMJXgfaiarNOHWFD2zsarngWsCFSQ4XDIBicXvSjTnSaImLlPib5sicgSO7LmBwlU1YjdXSbqJK1BYQZHGsBHIKIR3fEyYAN5fB0WQTo",
+  "Q5JJsLWYMJVymW3L5EdOeQwJiaabS39CRr1xnGZuXBjmbeGicUtqFnj4U8icQeDAMk3HK6FlGDL2W41p06Dk7Oibkw75XVTjBRQlicfNItib7dmz0",
+  "Q5JJsLWYMJUibnCc0SwNCjZYDXpy9EJzD3FzXpiae39SJRagYNDtPbOGRQhQG0oKCibics9RChWv0GhPCKUW7ZsvQEwKiawp3xKeJ0w6QT2xFZVY",
+  "Q5JJsLWYMJUm2lZD0zJLVLXT6YnpYUicLTvxicCPK0YmurOMuzMV40m0uaMRW0JOwJwd2sa2qt6ZDVTtjGia4iaiciaTwoNiaJPNLh8l4DN0IAkRYE",
+  "Q5JJsLWYMJV30mwjicRXXnzVpRcUFzGYegcVh7vnwPF31picqUxskCrxwXibx8rXKCtjSn9ofcHCA1QKDSL5rPhESLE7OJuqYrr0JKVyM5K10E",
+  "Q5JJsLWYMJWS9l5PL5eGAPTnia3lpNDckFzicXGYQHWB7bDlfOUzrIic0TaCUmdaoIRBIQgEj3TyP6fJKHNxB8jicmcS7cHWaoSRahzZ1kdzn6I",
+  "Q5JJsLWYMJUHCcBRrQVjricwZNiaVyzrkEEWOAwWPLw1KrVAE0X5R0BibGWoT8qeRTVzTWoWqgXFff7WbYSeav5I5nuZ65qM3mVduLUvULILic8",
+  "Q5JJsLWYMJUe6LrN9E3rx3LPXkZDK4J9RibicOGtN2WOWUV5l6ofOvBiaDuDD9vNAqRmJdfKZSAmOQasXYb91SqjmYnyy5mGwt1ibr7DSmmQWSA",
+  "Q5JJsLWYMJXD5snfggprIKX1n4cH9mm5na9Wkxf7t7zeAu8gF3ciaic3oPP1HmUoeGibHjLaevBlVpKvr1h9JhoLRd0HcSfgOrgecXibQVbpDk8",
+  "Q5JJsLWYMJWvkatACDQ06oBFkWIqST12ZHYe1icsf3tuesNJK0FDKKZXDPpcn6nyDWVqadL7kXziaos0WzSch9ZTteCZvjcATic7Uh8ia6V2Cvc",
+  "Q5JJsLWYMJX8YjXmljjRVAJplicrgdg4R2DSP4Z8wSibPMiaOcPRIsPxo4X222dqicaxCIAdN8XLHY1ylQQfynSlOCTJrW4nAXF1HHm2cucXndk"
+]);
+
+function ornamentAssetId(image) {
+  try {
+    const url=new URL(image.getAttribute('data-src') || image.getAttribute('src'));
+    return url.hostname==='mmbiz.qpic.cn'?url.pathname.split('/')[2]:'';
+  } catch { return ''; }
+}
+
+function clearTemplateGeometry(element) {
+  for(const node of [element,...element.querySelectorAll('*')]) for(const property of Array.from(node.style||[])) {
+    if (/^(?:display|position|z-index|transform|aspect-ratio|grid(?:-|$)|width|height|min-width|max-width|min-height|max-height|margin(?:-|$)|padding(?:-|$)|flex(?:-|$)|align-self)/.test(property)) node.style.removeProperty(property);
+  }
+}
+
+function containsTemplateMedia(element,selector) {
+  return [...element.querySelectorAll(selector)].some(node=>!(node.localName==='svg' && !node.childElementCount && !normalizedText(node.textContent) && /^0\s+0\s+1\s+1$/.test(node.getAttribute('viewBox')||'')));
+}
+
+function cleanReviewedTemplate(body,imageIndices) {
+  const removed=[];
+  const media='svg,math,table,video,audio,[data-formula],[data-latex],figcaption';
+  const sourceOf=image=>image.getAttribute('data-src') || image.getAttribute('src') || '';
+  const forget=(image,reason)=>removed.push({imageIndex:imageIndices.get(image),sourceUrl:sourceOf(image),reason});
+  let recognized=false;
+  for(const grid of [...body.querySelectorAll('section,div')]) {
+    if(grid.style.display!=='grid' || grid.style.gridTemplateColumns!=='100%' || grid.style.gridTemplateRows!=='100%' || containsTemplateMedia(grid,media)) continue;
+    const branches=[...grid.children], pictures=[...grid.querySelectorAll('img')];
+    const imageBranches=branches.filter(branch=>branch.querySelectorAll('img').length===1&&!normalizedText(branch.textContent));
+    const textBranches=branches.filter(branch=>normalizedText(branch.textContent));
+    if(branches.length!==18 || pictures.length!==14 || imageBranches.length!==14 || textBranches.length!==3) continue;
+    if(pictures.some(image=>!REVIEWED_COVER_ORNAMENTS.has(ornamentAssetId(image))) || new Set(pictures.map(ornamentAssetId)).size!==14) continue;
+    if([...imageBranches,...textBranches].some(branch=>branch.style.gridColumnStart!=='1'||branch.style.gridRowStart!=='1')) continue;
+    if(textBranches.some(branch=>branch.querySelector('img') || normalizedText(branch.textContent).length>60)) continue;
+    recognized=true;
+    for(const branch of imageBranches) {forget(branch.querySelector('img'),'reviewed-cover-ornament');branch.remove();}
+    for(const branch of [...grid.children]) if(!normalizedText(branch.textContent)) branch.remove();
+    clearTemplateGeometry(grid);
+  }
+  if(!recognized) return removed;
+  // This frame's chapter badges and paired heading ornaments are reviewed roles,
+  // not a global rule that small images, formula pictures or cartoons are empty.
+  for(const row of [...body.querySelectorAll('section,div')]) {
+    if(row.style.display!=='flex' || containsTemplateMedia(row,media)) continue;
+    const children=[...row.children], text=normalizedText(row.textContent), pictures=[...row.querySelectorAll('img')];
+    const noSemanticImage=image=>!image.hasAttribute('data-formula')&&!image.hasAttribute('data-latex')&&!image.hasAttribute('data-sync-formula-image')&&!/(?:formula|latex|math|equation)/i.test(image.getAttribute('class')||'')&&image.getAttribute('type')!=='latex'&&image.getAttribute('data-type')!=='latex'&&!image.getAttribute('title')&&['','图片'].includes(image.getAttribute('alt')||'');
+    const ornamentBranch=(branch,width)=>branch && !normalizedText(branch.textContent) && branch.querySelectorAll('img').length===1 && (()=>{const image=branch.querySelector('img');return noSemanticImage(image)&&image.style.width===width&&image.parentElement.style.width===width;})();
+    if(children.length===2 && pictures.length===1 && /^PART\d{1,2}/i.test(text) && text.length<=80 && ornamentBranch(children[0],'58px') && !children[1].querySelector('img')) {
+      forget(pictures[0],'reviewed-chapter-badge');children[0].remove();
+    } else if(children.length===3 && pictures.length===2 && text.length>0 && text.length<=40 && ornamentBranch(children[0],'34px') && ornamentBranch(children[2],'34px') && !children[1].querySelector('img') && normalizedText(children[1].textContent)===text) {
+      for(const branch of [children[0],children[2]]) {forget(branch.querySelector('img'),'reviewed-paired-heading-ornament');branch.remove();}
+    }
+  }
+  return removed;
+}
+
+function flattenCharacterCardHeadings(body) {
+  let count=0;
+  for(const row of [...body.querySelectorAll('section,div')]) {
+    const cards=[...row.children];
+    if(cards.length<2 || cards.length>8 || cards.some(card=>card.style.display!=='inline-block') || containsTemplateMedia(row,'img,svg,math,table,[data-formula],[data-latex]')) continue;
+    const matches=cards.map(card=>normalizedText(card.textContent).match(/^(?:[a-z]{1,8})?([\u3400-\u9fff])$/i));
+    if(matches.some(match=>!match)) continue;
+    const letters=cards.map((card,index)=>[...card.querySelectorAll('*')].find(node=>node.style.width==='40px'&&node.style.height==='40px'&&node.style.borderStyle==='solid'&&normalizedText(node.textContent)===matches[index][1]));
+    if(letters.some(letter=>!letter)) continue;
+    const paragraph=body.ownerDocument.createElement('p');paragraph.style.textAlign=row.style.textAlign||'center';
+    for(const [index,letter] of letters.entries()) {
+      const textNode=captionTextNodes(letter).find(node=>normalizedText(node.textContent)===matches[index][1]);
+      const style=captionTextStyle(textNode), span=body.ownerDocument.createElement('span');
+      span.textContent=matches[index][1];span.style.fontSize=String(style.size)+'px';span.style.fontWeight=style.weight;span.style.fontStyle=style.fontStyle;
+      if(style.color)span.style.color=style.color;
+      if(style.decoration)span.style.textDecoration=style.decoration;
+      paragraph.append(span);
+    }
+    row.replaceWith(paragraph);count++;
+  }
+  return count;
 }
 
 const CAPTION_BLOCKS = new Set('P DIV SECTION ARTICLE MAIN HEADER FOOTER H1 H2 H3 H4 H5 H6 BLOCKQUOTE FIGURE FIGCAPTION UL OL LI PRE HR'.split(' '));
@@ -358,6 +493,7 @@ function extractCollections(document) {
     names.push(element.getAttribute('data-album-title') || element.getAttribute('data-album-name') || element.getAttribute('data-column-name') || element.textContent);
   }
   names.push(...scriptStrings(document, ['album_name', 'album_title', 'column_name']));
+  names.push(...scriptAlbumTitles(document, raw=>decodeSourceString(raw,document)));
   return [...new Set(names.map(value => String(value || '').replace(/^(?:合集|专栏|文集)\s*[:：]\s*/, '').replace(/^#/, '').replace(/\s*[·•]\s*目录\s*$/, '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim()).filter(value => value && value.length <= 80))];
 }
 
@@ -395,6 +531,10 @@ function sanitizeStyle(element) {
     if (!STYLE_PROPS.has(property) || /url\s*\(|expression\s*\(|@import|javascript:|behavior:|var\s*\(/i.test(value)) continue;
     element.style.setProperty(property, value);
   }
+  // JSDOM enumerates a background shorthand while Chromium can expose expanded
+  // longhands. Read its solid color explicitly so both retain the same backdrop.
+  const solidBackground=probe.style.backgroundColor;
+  if (solidBackground && !/url\s*\(|expression\s*\(|var\s*\(/i.test(solidBackground)) element.style.backgroundColor=solidBackground;
   if (!element.getAttribute('style')) element.removeAttribute('style');
 }
 
@@ -431,7 +571,17 @@ export function cleanArticle(html, options = {}) {
   const document = parseDocument(html, options);
   const body = document.body;
   const warnings = [];
+  const imageIndices=new Map([...body.querySelectorAll('img')].map((image,index)=>[image,index]));
   const stats = { removedLinks: 0, removedEmptyBlocks: 0, removedImagePlaceholders: 0, removedEmptySvg: 0, removedTransparentBackgrounds: 0, removedDecorativeBackgrounds: 0, removedSmallDecorations: 0, removedHiddenElements: removeHiddenContent(body), trimmedTail: trimTail(body) ? 1 : 0 };
+  const removedDecorativeImages=cleanReviewedTemplate(body,imageIndices);
+  stats.removedDecorativeImages=removedDecorativeImages.length;
+  stats.flattenedCharacterHeadings=flattenCharacterCardHeadings(body);
+  stats.removedAnswerPanelBackgrounds=clearReviewedAnswerPanelBackgrounds(body);
+  stats.removedFormulaCardDecorations=clearReviewedFormulaCardDecorations(body);
+  if(stats.removedDecorativeImages) warnings.push(`已略去 ${stats.removedDecorativeImages} 张已确认的模板装饰图，保留标题和正文配图。`);
+  if(stats.flattenedCharacterHeadings) warnings.push('已将横排单字装饰标题整理为一行文字，省略字卡和拼音装饰。');
+  if(stats.removedAnswerPanelBackgrounds) warnings.push(`已略去 ${stats.removedAnswerPanelBackgrounds} 处问答面板的装饰底色，保留正文、公式和文字高亮。`);
+  if(stats.removedFormulaCardDecorations) warnings.push('已略去已确认公式卡片的装饰底色和边框，保留公式文字、颜色和上下标。');
   if (stats.trimmedTail) warnings.push('已删除回顾／近期热门文章标题及其后面的内容。');
 
   for (let element of [...body.querySelectorAll('*')]) {
@@ -549,7 +699,7 @@ export function cleanArticle(html, options = {}) {
   if (stats.removedImagePlaceholders) warnings.push(`已清除 ${stats.removedImagePlaceholders} 个没有内容的微信图片占位标签。`);
   if (stats.removedDecorativeBackgrounds || stats.removedSmallDecorations) warnings.push(`已略去 ${stats.removedDecorativeBackgrounds+stats.removedSmallDecorations} 处装饰背景，保留正文文字和内容图片。`);
   const localAssets = [...body.querySelectorAll('img[data-local-path]')].map(img => ({sourceUrl: img.getAttribute('src'), localPath: img.getAttribute('data-local-path')}));
-  return { html: body.innerHTML.trim(), warnings, blockingIssues: getBlockingIssues(body), stats: { ...stats, ...summarize(body) }, localAssets };
+  return { html: body.innerHTML.trim(), warnings, blockingIssues: getBlockingIssues(body), stats: { ...stats, ...summarize(body) }, localAssets, removedDecorativeImages };
 }
 
 export function parseArticle(html, options = {}) {
