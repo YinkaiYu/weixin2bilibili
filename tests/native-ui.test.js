@@ -37,7 +37,7 @@ function setup({ url = 'https://member.bilibili.com/york/read-editor', runImport
         calls.push(payload);
         if (runImport) return runImport(payload, progress);
         progress('正在保存草稿…');
-        return { draftId: '123', draftUrl: DRAFT, warnings: [] };
+        return { draftId: '123', draftUrl: DRAFT, verified:true, warnings: [] };
       },
       resetPendingImport: async payload => {
         resets.push(payload);
@@ -156,7 +156,7 @@ test('closing and reopening during import preserves the single running job and s
   const ui = setup({ runImport: async (_payload, progress) => {
     progress('正在上传第 2 张图片…');
     await pending;
-    return { draftId: '123', draftUrl: DRAFT, warnings: [] };
+    return { draftId: '123', draftUrl: DRAFT, verified:true, warnings: [] };
   } });
   try {
     ui.$('.launch').click(); ui.enterUrl(); ui.submit(); await tick();
@@ -251,16 +251,146 @@ test('errors leave the native editor untouched and allow retry; confirmed saved 
   } finally { saved.close(); }
 });
 
-test('renders server warnings as text and keeps them collapsed', async () => {
-  const ui = setup({ runImport: async () => ({ draftId: '123', draftUrl: DRAFT, warnings: ['<img src=x onerror=bad()>', '局部转成图片', '局部转成图片'] }) });
+test('renders legacy warnings as text in a collapsed warning group', async () => {
+  const ui = setup({ runImport: async () => ({ draftId: '123', draftUrl: DRAFT, verified:true,warnings: ['<img src=x onerror=bad()>', '局部转成图片', '局部转成图片'] }) });
   try {
     ui.enterUrl(); ui.submit(); await tick();
-    assert.equal(ui.$('.warnings').hidden, false);
-    assert.equal(ui.$('.warnings').open, false);
-    assert.equal(ui.$('.warnings').querySelectorAll('li').length, 2);
-    assert.equal(ui.$('.warnings').querySelector('img'), null);
-    assert.match(ui.$('.warnings').textContent, /<img src=x onerror=bad\(\)>/);
+    assert.equal(ui.$('.notices').hidden, false);
+    assert.equal(ui.$('.notices').open, false);
+    assert.equal(ui.$('[data-severity="warning"]').querySelectorAll('li').length, 2);
+    assert.equal(ui.$('.notices').querySelector('img'), null);
+    assert.match(ui.$('.notices').textContent, /<img src=x onerror=bad\(\)>/);
+    assert.equal(ui.$('.status').classList.contains('warning'),true);
   } finally { ui.close(); }
+});
+
+test('keeps ordinary information separate from warnings and errors',async()=>{
+  const ui=setup({runImport:async()=>({draftUrl:DRAFT,verified:true,notices:[{severity:'info',message:'上下标已转换为原生公式'}]})});
+  try{
+    ui.enterUrl();ui.submit();await tick();
+    assert.equal(ui.$('.status').textContent,'草稿已保存');
+    assert.ok(ui.$('.status').classList.contains('success'));
+    assert.equal(ui.$('[data-severity="info"]').hidden,false);
+    assert.equal(ui.$('[data-severity="warning"]').hidden,true);
+    assert.equal(ui.$('[data-severity="error"]').hidden,true);
+    assert.equal(ui.$('.notices').open,false);
+    assert.equal(ui.$('.more').hidden,true,'a completed result without a cover has no extra controls');
+    assert.equal(ui.messages[0].type,'OPEN_SAVED_DRAFT');
+  }finally{ui.close();}
+});
+
+test('closing ignores a pending cover callback while keeping the same completed cover available',async()=>{
+  let finish;
+  const gate=new Promise(resolve=>{finish=resolve;});
+  const ui=setup({runImport:async()=>({draftUrl:DRAFT,verified:true,cover:COVER,notices:[]}),sendMessage:async message=>message.type==='DOWNLOAD_COVER'?gate:{ok:true}});
+  try{
+    ui.enterUrl();ui.submit();await tick();ui.$('.download-cover').click();await tick();
+    assert.equal(ui.$('.download-cover').disabled,true);
+    ui.$('.close').click();ui.$('.launch').click();
+    assert.equal(ui.$('.download-cover').hidden,false);
+    assert.equal(ui.$('.download-cover').disabled,false);
+    finish({ok:false,error:{message:'上一轮下载失败'}});await tick();
+    assert.equal(ui.$('.download-cover').textContent,'下载封面图');
+    assert.equal(ui.$('.notices').hidden,true);
+    assert.equal(ui.$('.status').textContent,'草稿已保存');
+  }finally{finish?.({ok:true});ui.close();}
+});
+
+test('an explicit error severity prevents automatic navigation even if a result claims verification',async()=>{
+  const ui=setup({runImport:async()=>({draftUrl:DRAFT,verified:true,notices:[{severity:'error',message:'图片核验失败'},{severity:'warning',message:'请检查文集'},{severity:'info',message:'字号已适配'}]})});
+  try{
+    ui.enterUrl();ui.submit();await tick();
+    assert.ok(ui.$('.status').classList.contains('error'));
+    assert.equal(ui.$('.status').getAttribute('aria-live'),'assertive');
+    assert.equal(ui.$('[data-severity="error"]').querySelector('li').textContent,'图片核验失败');
+    assert.equal(ui.$('[data-severity="warning"]').hidden,false);
+    assert.equal(ui.$('[data-severity="info"]').hidden,false);
+    assert.equal(ui.messages.length,0);
+    assert.equal(ui.$('.open').hidden,false);
+    assert.equal(ui.$('.primary').disabled,true);
+  }finally{ui.close();}
+});
+
+test('a legacy result with no verification flag is available manually but is never labelled verified success',async()=>{
+  const ui=setup({runImport:async()=>({draftUrl:DRAFT,warnings:[]})});
+  try{
+    ui.enterUrl();ui.submit();await tick();
+    assert.equal(ui.messages.length,0);
+    assert.equal(ui.$('.status').textContent,'草稿已保存，核验结果未确认');
+    assert.ok(ui.$('.status').classList.contains('error'));
+    assert.equal(ui.$('.open').hidden,false);
+  }finally{ui.close();}
+});
+
+const COVER={url:'https://i0.hdslb.com/bfs/new_dyn/cover.png',filename:'文章-封面.png'};
+test('offers cover download inside collapsed More and reuses the uploaded Bilibili image',async()=>{
+  const ui=setup({runImport:async()=>({draftUrl:DRAFT,verified:true,cover:COVER,notices:[]})});
+  try{
+    ui.enterUrl();ui.$('.more').open=true;ui.submit();await tick();
+    assert.equal(ui.$('.more').open,false);
+    assert.equal(ui.$('.more').hidden,false);
+    assert.ok([...ui.shadow.querySelectorAll('.more .local')].every(group=>group.hidden));
+    assert.equal(ui.$('.download-cover').hidden,false);
+    assert.ok(ui.$('.more').contains(ui.$('.download-cover')));
+    ui.$('.more').open=true;ui.$('.download-cover').click();await tick();
+    assert.equal(ui.messages.length,2);
+    assert.deepEqual(JSON.parse(JSON.stringify(ui.messages[1])),{type:'DOWNLOAD_COVER',...COVER});
+    assert.equal(ui.calls.length,1,'downloading does not reload or import the WeChat article');
+    assert.equal(ui.$('.status').textContent,'草稿已保存');
+    ui.$('.close').click();ui.$('.launch').click();
+    assert.equal(ui.$('.download-cover').hidden,false,'reopening the same completed result keeps its cover');
+    ui.$('.download-cover').click();await tick();
+    assert.equal(ui.messages.at(-1).type,'DOWNLOAD_COVER');
+    ui.enterUrl('https://mp.weixin.qq.com/s/new-source');
+    assert.equal(ui.$('.download-cover').hidden,true,'a new source clears the old cover');
+    assert.ok([...ui.shadow.querySelectorAll('.more .local')].every(group=>!group.hidden));
+  }finally{ui.close();}
+});
+
+test('cover download failure and cancellation remain retryable without changing draft verification status',async()=>{
+  let downloads=0;
+  const ui=setup({runImport:async()=>({draftUrl:DRAFT,verified:false,cover:COVER,notices:[]}),sendMessage:async message=>{
+    if(message.type==='DOWNLOAD_COVER')return ++downloads===1?{ok:false,error:{message:'下载失败'}}:downloads===2?{ok:false,cancelled:true}:{ok:true,downloadId:7};
+    return {ok:true};
+  }});
+  try{
+    ui.enterUrl();ui.submit();await tick();const draftStatus=ui.$('.status').textContent;
+    ui.$('.download-cover').click();await tick();
+    assert.equal(ui.$('.download-cover').textContent,'下载失败，重试');
+    assert.equal(ui.$('.download-cover').disabled,false);
+    assert.equal(ui.$('.status').textContent,draftStatus);
+    assert.ok(ui.$('.status').classList.contains('error'));
+    ui.$('.download-cover').click();await tick();
+    assert.equal(ui.$('.download-cover').textContent,'下载封面图');
+    assert.equal(ui.$('.download-cover').classList.contains('error'),false);
+    ui.$('.download-cover').click();await tick();
+    assert.equal(downloads,3);assert.equal(ui.$('.status').textContent,draftStatus);
+  }finally{ui.close();}
+});
+
+test('changing the source clears cover data and ignores a late download failure from the previous article',async()=>{
+  let finish;
+  const gate=new Promise(resolve=>{finish=resolve;});
+  const ui=setup({runImport:async()=>({draftUrl:DRAFT,verified:true,cover:COVER,notices:[]}),sendMessage:async message=>message.type==='DOWNLOAD_COVER'?gate:{ok:true}});
+  try{
+    ui.enterUrl();ui.submit();await tick();ui.$('.download-cover').click();await tick();
+    ui.enterUrl('https://mp.weixin.qq.com/s/new-article');
+    assert.equal(ui.$('.download-cover').hidden,true);
+    finish({ok:false,error:{message:'旧文章下载失败'}});await tick();
+    assert.equal(ui.$('.notices').hidden,true);
+    assert.equal(ui.$('.status').hidden,true);
+    assert.equal(ui.$('.download-cover').hidden,true);
+  }finally{finish({ok:true});ui.close();}
+});
+
+test('never offers a cover that would request the WeChat domain again',async()=>{
+  const ui=setup({runImport:async()=>({draftUrl:DRAFT,verified:true,cover:{...COVER,url:'https://mmbiz.qpic.cn/original.png'},notices:[]})});
+  try{
+    ui.enterUrl();ui.submit();await tick();
+    assert.equal(ui.$('.download-cover').hidden,true);
+    ui.$('.download-cover').dispatchEvent(new ui.window.Event('click'));await tick();
+    assert.equal(ui.messages.filter(message=>message.type==='DOWNLOAD_COVER').length,0);
+  }finally{ui.close();}
 });
 
 test('refuses unsafe draft destinations and reports background opening failures without losing the saved link', async () => {
@@ -284,7 +414,10 @@ test('unverified saved drafts remain available for inspection without automatic 
   const ui = setup({ runImport: async () => ({ draftId: '123', draftUrl: DRAFT, verified: false, warnings: ['读回检查失败'] }) });
   try {
     ui.enterUrl(); ui.submit(); await tick();
-    assert.equal(ui.$('.status').textContent, '草稿已保存，需要检查');
+    assert.equal(ui.$('.status').textContent, '草稿已保存，但核验未通过');
+    assert.equal(ui.$('.status').classList.contains('error'),true);
+    assert.equal(ui.$('.status').getAttribute('role'),'alert');
+    assert.equal(ui.$('[data-severity="error"]').hidden,false);
     assert.equal(ui.$('.new-draft').hidden, true);
     assert.equal(ui.messages.length, 0);
     assert.equal(ui.$('.open').hidden, false);
@@ -326,7 +459,7 @@ test('unverified recovery preserves the draft and requires an explicit click to 
   });
   try{
     ui.$('.launch').click();ui.enterUrl();ui.submit();await tick();
-    assert.equal(ui.$('.status').textContent,'已有草稿已保留，需要检查');
+    assert.equal(ui.$('.status').textContent,'已有草稿已保留，但核验未通过');
     assert.equal(ui.$('.new-draft').hidden,false);assert.equal(ui.$('.new-draft').textContent,'另建新草稿');
     assert.equal(ui.$('.recover').hidden,true);assert.equal(ui.$('.primary').disabled,true);
     assert.equal(ui.messages.length,0);assert.equal(ui.resets.length,0);

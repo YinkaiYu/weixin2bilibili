@@ -212,6 +212,25 @@ test('preserves code block whitespace and native line breaks', () => {
   assert.equal(r.content.paragraphs[2].para_type, 3);
 });
 
+test('converts the confirmed question directory into separate native paragraphs with inline emphasis intact', () => {
+  const r = convert('<pre><code><span><strong>问答导航</strong><span><br></span><span style="color:#123456">Q1 第一个问题？</span><span><br></span><span>Q2 第二个<strong>重点</strong>问题？</span><br></span></code></pre><p>正文</p>');
+  assert.deepEqual(r.blockingIssues, []);
+  assert.deepEqual(r.content.paragraphs.map(p => p.para_type), [1, 1, 1, 1]);
+  assert.deepEqual(r.content.paragraphs.map(p => p.text.nodes.map(n => n.word.words).join('')), ['问答导航', 'Q1 第一个问题？', 'Q2 第二个重点问题？', '正文']);
+  assert.equal(r.content.paragraphs[0].text.nodes[0].word.style.bold, true);
+  assert.equal(r.content.paragraphs[1].text.nodes[0].word.color, '#123456');
+  assert.ok(r.content.paragraphs[2].text.nodes.some(n => n.word.words === '重点' && n.word.style.bold));
+});
+
+test('keeps genuine code and nonconsecutive question-like content as code, preserving BR newlines', () => {
+  for (const html of ['<pre><code class="language-js">问答导航<br>Q1 示例<br>Q2 示例</code></pre>', '<pre><code>问答导航<br>Q1 示例<br>Q3 示例</code></pre>', '<pre><code>const a = 1;<br>const b = 2;</code></pre>']) {
+    const r = convert(html);
+    assert.equal(r.content.paragraphs.length, 1);
+    assert.equal(r.content.paragraphs[0].para_type, 8);
+    assert.ok(r.content.paragraphs[0].code.content.includes('\n'));
+  }
+});
+
 test('blocks inline bitmap formulas with no LaTeX rather than silently changing placement', () => {
   const r = convert(`<p>公式为<img src="${image}">，见上式。</p>`);
   assert.ok(r.blockingIssues.some(x => x.includes('行内图片')));

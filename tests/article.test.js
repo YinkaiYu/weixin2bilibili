@@ -474,6 +474,76 @@ test('removes the reviewed tape formula card decoration without flattening its c
   assert.deepEqual([...card.querySelectorAll('sub')].map(s=>s.textContent),['peak','baseline']);
   assert.equal(cleanArticle(result.html).html,result.html);
   assert.equal(cleanArticle(html.replace('ΔF','ΔE')).stats.removedFormulaCardDecorations,0);
+  for(const reset of ['initial','unset']) assert.equal(cleanArticle(html.replace('background:rgb(252,248,243);',`background:rgb(252,248,243);background-image:${reset};`)).stats.removedFormulaCardDecorations,1,reset);
+  assert.equal(cleanArticle(html.replace('background:rgb(252,248,243);','background:rgb(252,248,243);background-image:linear-gradient(red,blue);')).stats.removedFormulaCardDecorations,0);
   const highlight=cleanArticle(html.replace('<i>F</i>','<i style="background:yellow">F</i>'));
   assert.equal(doc(highlight.html).querySelector('i').style.backgroundColor,'yellow');
+});
+
+test('recognizes reviewed lazy ornaments before image decoding and tolerates an absent empty grid spacer',()=>{
+  const cover=reviewedCoverFixture().replace('https://mmbiz.qpic.cn/','//mmbiz.qpic.cn/').replace('<section style="padding-top:124.63%"></section>','');
+  const chapter='<section style="display:flex">'+ornamentBranchFixture(58)+'<section>PART 01章节标题</section></section>';
+  const paired='<section style="display:flex">'+ornamentBranchFixture(34)+'<section>短标题</section>'+ornamentBranchFixture(34)+'</section>';
+  for(const width of ['100%','auto','']) {
+    const live=(chapter+paired).replaceAll('alt="图片" style="width:58px"',`alt="图片" style="width:${width}"`).replaceAll('alt="图片" style="width:34px"',`alt="图片" style="width:${width}"`);
+    const result=cleanArticle(cover+live);
+    assert.equal(result.stats.removedDecorativeImages,17,width);
+    assert.equal(result.stats.images,0,width);
+    assert.equal(doc(result.html).body.textContent,'标题一标题二标题三PART 01章节标题短标题');
+  }
+  assert.equal(cleanArticle(cover+chapter.replace('alt="图片" style="width:58px"','alt="图片" style="width:80px"')).stats.images,1);
+});
+
+test('matches reviewed answer panels with equivalent expanded corner, padding and normal-weight styles',()=>{
+  const corners=['top-left','top-right','bottom-right','bottom-left'].map(side=>`border-${side}-radius:6px`).join(';');
+  const padding=['top','right','bottom','left'].map(side=>`padding-${side}:10px`).join(';');
+  const html=`<section style="background-color:#efeff6;color:#3e3e3e;font-weight:normal;border:2px solid #2e3191;margin:20px 0;${corners};${padding}"><p>答：第一段</p><p>第二段 x<sup>2</sup></p></section>`;
+  const result=cleanArticle(html);
+  assert.equal(result.stats.removedAnswerPanelBackgrounds,1);
+  assert.equal(doc(result.html).querySelector('section').style.backgroundColor,'');
+  assert.equal(result.stats.superscripts,1);
+  for(const reset of ['initial','unset']) assert.equal(cleanArticle(html.replace('background-color:#efeff6;',`background-color:#efeff6;background-image:${reset};`)).stats.removedAnswerPanelBackgrounds,1,reset);
+  assert.equal(cleanArticle(html.replace('background-color:#efeff6;','background-color:#efeff6;background-image:linear-gradient(red,blue);')).stats.removedAnswerPanelBackgrounds,0);
+});
+
+test('removes the independent opening giveaway lead and ends at the benefits column while retaining earlier credits',()=>{
+  const main='正文内容用于解释研究发现与适用条件，作者信息属于正文来源，应该在删除互动尾栏时完整保留。';
+  const result=cleanArticle(`<p>认真阅读下面的文章，并思考文末互动提出的问题，严格按照互动：你的答案格式留言。</p><p>${main}</p><p>作者：甲；编辑：乙</p><h3>福利时间</h3><p>赠书介绍</p><img src="https://mmbiz.qpic.cn/book.png"><p>尾栏编辑：丙</p>`);
+  assert.equal(result.stats.removedOpeningLeads,1);
+  assert.equal(result.stats.trimmedTail,1);
+  assert.equal(result.stats.images,0);
+  assert.equal(doc(result.html).body.textContent,main+'作者：甲；编辑：乙');
+  const mention=cleanArticle('<p>正文先介绍活动。</p><p>认真阅读下面的文章，并思考文末互动提出的问题，这是原文的一句话。</p><p>这里提到福利时间，但属于正文说明。</p>');
+  assert.equal(mention.stats.removedOpeningLeads,0);
+  assert.equal(mention.stats.trimmedTail,0);
+});
+
+test('removes only independent stance statements and their labels while keeping credits and research claims',()=>{
+  const result=cleanArticle('<p>正文讨论作者观点与机构立场的区别。</p><section><p>作者：甲</p><h3>立场声明</h3><p>翻译内容仅代表作者观点</p><p>不代表中科院物理所立场</p><p>编辑：乙</p><p>参考资料：[1] 原论文</p></section><p>研究者强调本文观点不代表全部学者的立场，并讨论了证据。</p>');
+  assert.equal(result.stats.removedStanceStatements,3);
+  const text=doc(result.html).body.textContent;
+  assert.match(text,/作者：甲编辑：乙参考资料/);
+  assert.match(text,/研究者强调/);
+  assert.doesNotMatch(text,/翻译内容仅代表|不代表中科院物理所/);
+});
+
+test('trims explicit voting and previous-issue footer headings without cutting body mentions',()=>{
+  for(const heading of ['投票','上期也精彩']) {
+    const result=cleanArticle(`<p>正文提到了投票这个词。</p><p>参考文献：[1] 论文</p><h3>${heading}</h3><p>尾部推广</p><img src="https://mmbiz.qpic.cn/ad.png">`);
+    assert.equal(result.stats.trimmedTail,1);
+    assert.equal(doc(result.html).body.textContent,'正文提到了投票这个词。参考文献：[1] 论文');
+    assert.equal(result.stats.images,0);
+  }
+  const body='这里是足够长的科学正文，不是互动栏目。它详细介绍实验条件和结论，并保留来源与参考资料。';
+  assert.equal(doc(cleanArticle(`<p>${body}</p><p>【互动问题：你怎么看？】</p><p>尾部</p>`).html).body.textContent,body);
+  assert.equal(cleanArticle('<p>正文</p><p>投票</p><p>这里仍是正文</p>').stats.trimmedTail,0);
+});
+
+test('preserves wrapped semantic line breaks in navigation, code and paragraphs while removing blank spacer blocks',()=>{
+  const result=cleanArticle('<pre><code><span><br></span><span>问答导航</span><span><br></span><span>Q1 第一题</span><span><br></span><span>Q2 第二题</span><span><br></span></code></pre><p><span><br></span>第一行<span><span><br></span></span>第二行<span><br></span><span><br></span>第三行<span><br></span></p><p><span><br></span></p>');
+  const d=doc(result.html);
+  assert.equal(d.querySelector('pre').querySelectorAll('br').length,2);
+  assert.equal(d.querySelector('p').querySelectorAll('br').length,2);
+  assert.equal(d.querySelectorAll('p').length,1);
+  assert.equal(cleanArticle(result.html).html,result.html);
 });

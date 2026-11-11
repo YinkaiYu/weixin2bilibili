@@ -160,6 +160,21 @@ function clearDecorativeBackground(element) {
   if (element.getAttribute('data-sync-unsupported')==='CSS 背景图') element.removeAttribute('data-sync-unsupported');
 }
 
+function pixelsEqual(value,pixels) {
+  return /^\d+(?:\.\d+)?(?:px)?$/.test(String(value)) && Number.parseFloat(value)===pixels;
+}
+
+function cornersEqual(css,pixels) {
+  return ['TopLeft','TopRight','BottomRight','BottomLeft'].every(corner=>String(css[`border${corner}Radius`]||css.borderRadius).split(/\s+/).every(value=>pixelsEqual(value,pixels)));
+}
+
+function hasBackgroundImage(css) {
+  // Chromium exposes the implicit image reset from background:<solid> as
+  // "initial"; JSDOM often exposes an empty value. This non-inherited property
+  // also resets to none for "unset". URLs, gradients and inherit stay protected.
+  return !['','none','initial','unset'].includes(css.backgroundImage.trim().toLowerCase());
+}
+
 function clearReviewedAnswerPanelBackgrounds(body) {
   let removed=0;
   const isColor=(value,r,g,b)=>{const color=cssColor(value);return color&&color[0]===r&&color[1]===g&&color[2]===b&&color[3]===1;};
@@ -169,10 +184,10 @@ function clearReviewedAnswerPanelBackgrounds(body) {
     // around several ordinary paragraphs. Do not generalize to inline highlights,
     // independent formula cards or white text supported by a colored heading.
     if(!/^答[:：]/.test(normalizedText(panel.textContent)) || panel.querySelectorAll('p,ol,ul').length<2) continue;
-    if(!isColor(css.backgroundColor,239,239,246) || !isColor(css.color,62,62,62) || css.fontWeight!=='400') continue;
-    if(css.borderRadius!=='6px' || css.padding!=='10px' || css.marginTop!=='20px' || css.marginBottom!=='20px' || css.marginLeft!=='0px' || css.marginRight!=='0px') continue;
+    if(!isColor(css.backgroundColor,239,239,246) || !isColor(css.color,62,62,62) || !['400','normal'].includes(css.fontWeight)) continue;
+    if(!cornersEqual(css,6) || ['Top','Right','Bottom','Left'].some(side=>!pixelsEqual(css[`padding${side}`],10)) || !pixelsEqual(css.marginTop,20) || !pixelsEqual(css.marginBottom,20) || !pixelsEqual(css.marginLeft,0) || !pixelsEqual(css.marginRight,0)) continue;
     if(['Top','Right','Bottom','Left'].some(side=>css[`border${side}Width`]!=='2px'||css[`border${side}Style`]!=='solid'||!isColor(css[`border${side}Color`],46,49,145))) continue;
-    if(css.backgroundImage && css.backgroundImage!=='none' || panel.hasAttribute('data-lazy-bgimg') || panel.hasAttribute('data-sync-background-url')) continue;
+    if(hasBackgroundImage(css) || panel.hasAttribute('data-lazy-bgimg') || panel.hasAttribute('data-sync-background-url')) continue;
     if(!textReadableWithoutImage(panel,panel)) continue;
     css.removeProperty('background');css.removeProperty('background-color');removed++;
   }
@@ -187,8 +202,8 @@ function clearReviewedFormulaCardDecorations(body) {
     // This reviewed formula's two subscripts and brown text remain native. The
     // cream card and border are decoration; unknown colored cards stay intact.
     if(normalizedText(card.textContent)!=='ΔF=Fpeak−Fbaseline' || scripts.length!==2 || scripts[0].textContent!=='peak' || scripts[1].textContent!=='baseline') continue;
-    if(card.querySelector('img,svg,math,table,[data-formula],[data-latex]') || css.backgroundImage && css.backgroundImage!=='none') continue;
-    if(!isColor(css.backgroundColor,252,248,243) || !isColor(css.color,130,66,46) || css.fontSize!=='20px' || css.textAlign!=='center' || css.borderRadius!=='10px' || css.padding!=='18px 12px') continue;
+    if(card.querySelector('img,svg,math,table,[data-formula],[data-latex]') || hasBackgroundImage(css)) continue;
+    if(!isColor(css.backgroundColor,252,248,243) || !isColor(css.color,130,66,46) || css.fontSize!=='20px' || css.textAlign!=='center' || !cornersEqual(css,10) || !pixelsEqual(css.paddingTop,18) || !pixelsEqual(css.paddingBottom,18) || !pixelsEqual(css.paddingLeft,12) || !pixelsEqual(css.paddingRight,12)) continue;
     if(['Top','Right','Bottom','Left'].some(side=>css[`border${side}Width`]!=='1px'||css[`border${side}Style`]!=='solid'||!isColor(css[`border${side}Color`],233,219,207))) continue;
     if(!textReadableWithoutImage(card,card)) continue;
     css.removeProperty('background');css.removeProperty('background-color');
@@ -219,7 +234,7 @@ const REVIEWED_COVER_ORNAMENTS = new Set([
 
 function ornamentAssetId(image) {
   try {
-    const url=new URL(image.getAttribute('data-src') || image.getAttribute('src'));
+    const url=new URL(image.getAttribute('data-src') || image.getAttribute('src'),'https://mp.weixin.qq.com/');
     return url.hostname==='mmbiz.qpic.cn'?url.pathname.split('/')[2]:'';
   } catch { return ''; }
 }
@@ -245,7 +260,8 @@ function cleanReviewedTemplate(body,imageIndices) {
     const branches=[...grid.children], pictures=[...grid.querySelectorAll('img')];
     const imageBranches=branches.filter(branch=>branch.querySelectorAll('img').length===1&&!normalizedText(branch.textContent));
     const textBranches=branches.filter(branch=>normalizedText(branch.textContent));
-    if(branches.length!==18 || pictures.length!==14 || imageBranches.length!==14 || textBranches.length!==3) continue;
+    if(pictures.length!==14 || imageBranches.length!==14 || textBranches.length!==3) continue;
+    if(branches.some(branch=>!imageBranches.includes(branch)&&!textBranches.includes(branch)&&containsTemplateMedia(branch,media))) continue;
     if(pictures.some(image=>!REVIEWED_COVER_ORNAMENTS.has(ornamentAssetId(image))) || new Set(pictures.map(ornamentAssetId)).size!==14) continue;
     if([...imageBranches,...textBranches].some(branch=>branch.style.gridColumnStart!=='1'||branch.style.gridRowStart!=='1')) continue;
     if(textBranches.some(branch=>branch.querySelector('img') || normalizedText(branch.textContent).length>60)) continue;
@@ -261,7 +277,10 @@ function cleanReviewedTemplate(body,imageIndices) {
     if(row.style.display!=='flex' || containsTemplateMedia(row,media)) continue;
     const children=[...row.children], text=normalizedText(row.textContent), pictures=[...row.querySelectorAll('img')];
     const noSemanticImage=image=>!image.hasAttribute('data-formula')&&!image.hasAttribute('data-latex')&&!image.hasAttribute('data-sync-formula-image')&&!/(?:formula|latex|math|equation)/i.test(image.getAttribute('class')||'')&&image.getAttribute('type')!=='latex'&&image.getAttribute('data-type')!=='latex'&&!image.getAttribute('title')&&['','图片'].includes(image.getAttribute('alt')||'');
-    const ornamentBranch=(branch,width)=>branch && !normalizedText(branch.textContent) && branch.querySelectorAll('img').length===1 && (()=>{const image=branch.querySelector('img');return noSemanticImage(image)&&image.style.width===width&&image.parentElement.style.width===width;})();
+    // Live lazy images keep width:100% (or no width) until decoded; saved HTML
+    // often replaces that with a pixel width. The reviewed fixed-size wrapper is
+    // the stable role marker, while incompatible explicit image widths stay safe.
+    const ornamentBranch=(branch,width)=>branch && !normalizedText(branch.textContent) && branch.querySelectorAll('img').length===1 && (()=>{const image=branch.querySelector('img');return noSemanticImage(image)&&['','auto','100%',width].includes(image.style.width)&&image.parentElement.style.width===width;})();
     if(children.length===2 && pictures.length===1 && /^PART\d{1,2}/i.test(text) && text.length<=80 && ornamentBranch(children[0],'58px') && !children[1].querySelector('img')) {
       forget(pictures[0],'reviewed-chapter-badge');children[0].remove();
     } else if(children.length===3 && pictures.length===2 && text.length>0 && text.length<=40 && ornamentBranch(children[0],'34px') && ornamentBranch(children[2],'34px') && !children[1].querySelector('img') && normalizedText(children[1].textContent)===text) {
@@ -497,19 +516,51 @@ function extractCollections(document) {
   return [...new Set(names.map(value => String(value || '').replace(/^(?:合集|专栏|文集)\s*[:：]\s*/, '').replace(/^#/, '').replace(/\s*[·•]\s*目录\s*$/, '').replace(/[\u200B-\u200D\uFEFF]/g, '').trim()).filter(value => value && value.length <= 80))];
 }
 
-function isTailHeading(element) {
+function independentStatementText(value) {
+  const text=normalizedText(value).replace(/^(?:立场声明|特别声明|声明)[:：]?/,'');
+  if(!text || text.length>180) return false;
+  return /^(?:(?:翻译内容|译文|本文(?:内容|观点)?|文章(?:内容|观点)?|内容|文中(?:内容|观点))?仅?代表作者(?:个人)?(?:观点|看法|立场)[，,。；;！!]*)?(?:不代表[^，,。；;！!？?：:]{1,50}(?:立场|观点)[，,。；;！!]*)?$/.test(text);
+}
+
+function removeStanceStatements(body) {
+  let removed=0;
+  for(const node of [...body.querySelectorAll('p,section,div,blockquote')]) {
+    if(!body.contains(node) || node.querySelector('img,svg,math,table,[data-formula],[data-latex]') || !independentStatementText(node.textContent)) continue;
+    const heading=node.previousElementSibling;
+    if(heading && /^(?:立场声明|特别声明|声明)[:：]?$/.test(normalizedText(heading.textContent)) && !heading.querySelector('img,svg,math,table') && /^(?:H[1-6]|P)$/.test(heading.tagName)) {heading.remove();removed++;}
+    node.remove();removed++;
+  }
+  return removed;
+}
+
+function removeOpeningInteractionLead(body) {
+  const first=[...body.querySelectorAll('p')].find(p=>normalizedText(p.textContent));
+  if(!first || first.querySelector('img,svg,math,table,[data-formula],[data-latex]')) return 0;
+  const text=normalizedText(first.textContent);
+  if(!/^认真阅读下面的文章[，,、]?并思考文末互动提出的问题/.test(text) || text.length>400 || !normalizedText(body.textContent).startsWith(text)) return 0;
+  first.remove();return 1;
+}
+
+function isTailHeading(element,body) {
   if (element.querySelector('img,svg,math,video,audio')) return false;
   let text = normalizedText(element.textContent).toLowerCase();
   text = text.replace(/^[\-—–·•|｜:：【】\[\]《》「」『』<>()（）]+|[\-—–·•|｜:：【】\[\]《》「」『』<>()（）]+$/g, '');
-  return ['上期回顾', '往期回顾', '近期热门文章top10'].includes(text);
+  if(['上期回顾', '往期回顾', '近期热门文章top10','上期也精彩'].includes(text)) return true;
+  if(text==='投票' && /^h[1-6]$/.test(element.localName)) return true;
+  if(text!=='福利时间' && !/^互动问题(?:[:：].{0,160})?$/.test(text)) return false;
+  // These are optional end columns, not incidental mentions in the article or
+  // standalone imported titles. Require substantial preceding article content.
+  const before=element.ownerDocument.createRange();before.setStart(body,0);before.setEndBefore(element);
+  return normalizedText(before.toString()).length>=40;
 }
 
 function trimTail(body) {
-  const candidates = [...body.querySelectorAll('h1,h2,h3,h4,h5,h6,p,section,div,span,strong,b')].filter(isTailHeading);
-  const found = candidates.find(element => ![...element.querySelectorAll('*')].some(isTailHeading));
+  const matches=element=>isTailHeading(element,body);
+  const candidates = [...body.querySelectorAll('h1,h2,h3,h4,h5,h6,p,section,div,span,strong,b')].filter(matches);
+  const found = candidates.find(element => ![...element.querySelectorAll('*')].some(matches));
   if (!found) return false;
   let boundary = found;
-  while (boundary.parentElement && boundary.parentElement !== body && isTailHeading(boundary.parentElement)) boundary = boundary.parentElement;
+  while (boundary.parentElement && boundary.parentElement !== body && matches(boundary.parentElement)) boundary = boundary.parentElement;
   const range = body.ownerDocument.createRange();
   range.setStartBefore(boundary);
   range.setEnd(body, body.childNodes.length);
@@ -572,17 +623,22 @@ export function cleanArticle(html, options = {}) {
   const body = document.body;
   const warnings = [];
   const imageIndices=new Map([...body.querySelectorAll('img')].map((image,index)=>[image,index]));
-  const stats = { removedLinks: 0, removedEmptyBlocks: 0, removedImagePlaceholders: 0, removedEmptySvg: 0, removedTransparentBackgrounds: 0, removedDecorativeBackgrounds: 0, removedSmallDecorations: 0, removedHiddenElements: removeHiddenContent(body), trimmedTail: trimTail(body) ? 1 : 0 };
+  const stats = { removedLinks: 0, removedEmptyBlocks: 0, removedImagePlaceholders: 0, removedEmptySvg: 0, removedTransparentBackgrounds: 0, removedDecorativeBackgrounds: 0, removedSmallDecorations: 0, removedHiddenElements: removeHiddenContent(body) };
+  stats.removedStanceStatements=removeStanceStatements(body);
+  stats.removedOpeningLeads=removeOpeningInteractionLead(body);
+  stats.flattenedCharacterHeadings=flattenCharacterCardHeadings(body);
+  stats.trimmedTail=trimTail(body)?1:0;
   const removedDecorativeImages=cleanReviewedTemplate(body,imageIndices);
   stats.removedDecorativeImages=removedDecorativeImages.length;
-  stats.flattenedCharacterHeadings=flattenCharacterCardHeadings(body);
   stats.removedAnswerPanelBackgrounds=clearReviewedAnswerPanelBackgrounds(body);
   stats.removedFormulaCardDecorations=clearReviewedFormulaCardDecorations(body);
   if(stats.removedDecorativeImages) warnings.push(`已略去 ${stats.removedDecorativeImages} 张已确认的模板装饰图，保留标题和正文配图。`);
   if(stats.flattenedCharacterHeadings) warnings.push('已将横排单字装饰标题整理为一行文字，省略字卡和拼音装饰。');
   if(stats.removedAnswerPanelBackgrounds) warnings.push(`已略去 ${stats.removedAnswerPanelBackgrounds} 处问答面板的装饰底色，保留正文、公式和文字高亮。`);
   if(stats.removedFormulaCardDecorations) warnings.push('已略去已确认公式卡片的装饰底色和边框，保留公式文字、颜色和上下标。');
-  if (stats.trimmedTail) warnings.push('已删除回顾／近期热门文章标题及其后面的内容。');
+  if(stats.removedStanceStatements) warnings.push('已清除独立的立场声明，保留作者、编辑和参考资料。');
+  if(stats.removedOpeningLeads) warnings.push('已清除开头的微信互动赠书引导。');
+  if (stats.trimmedTail) warnings.push('已删除回顾、福利互动或投票等尾部栏目及其后面的内容。');
 
   for (let element of [...body.querySelectorAll('*')]) {
     if (!body.contains(element)) continue;
@@ -680,6 +736,18 @@ export function cleanArticle(html, options = {}) {
     node.textContent = node.textContent.replace(/[\u200B-\u200D\uFEFF]/g, '');
   }
 
+  // A span containing BR is an authored line break in code/navigation or an
+  // inline paragraph, not an empty spacer. Unwrap it before empty-node cleanup
+  // so the break survives and adjacent blank breaks can still be collapsed.
+  for(const element of [...body.querySelectorAll('span,strong,b,em,i,u,s')].reverse()) {
+    if(normalizedText(element.textContent) || !element.querySelector('br')) continue;
+    let container=element.closest('p,pre,code,li,h1,h2,h3,h4,h5,h6');
+    if(!container) {
+      const block=element.closest('section,div');
+      if(block && ![...block.children].some(child=>CAPTION_BLOCKS.has(child.tagName))) container=block;
+    }
+    if(container && normalizedText(container.textContent) && [...element.childNodes].every(node=>node.nodeType===3&&!normalizedText(node.textContent)||node.nodeType===1&&node.localName==='br')) element.replaceWith(...element.childNodes);
+  }
   // Work from leaves to roots so nested empty WeChat spacer sections also disappear.
   for (const element of [...body.querySelectorAll('*')].reverse()) {
     if (EMPTY_BLOCKS.has(element.localName) && !normalizedText(element.textContent) && !element.querySelector('img,svg,math,hr,[data-sync-unsupported],[data-sync-background-url]') && !element.matches('[data-sync-background-url],[data-formula],[data-latex]')) {
@@ -688,6 +756,19 @@ export function cleanArticle(html, options = {}) {
   }
   // Preserve line breaks within a text paragraph, while collapsing blank lines.
   for (const br of [...body.querySelectorAll('br')]) {
+    if(!body.contains(br)) continue;
+    let container=br.closest('p,pre,code,li,h1,h2,h3,h4,h5,h6');
+    if(!container) {
+      const block=br.closest('section,div');
+      if(block && ![...block.children].some(child=>CAPTION_BLOCKS.has(child.tagName))) container=block;
+    }
+    if(container) {
+      const before=document.createRange(), after=document.createRange();
+      before.selectNodeContents(container);before.setEndBefore(br);
+      after.selectNodeContents(container);after.setStartAfter(br);
+      const meaningful=range=>normalizedText(range.toString()) || range.cloneContents().querySelector('img,svg,math,[data-formula],[data-latex]');
+      if(!meaningful(before)||!meaningful(after)) {br.remove();stats.removedEmptyBlocks++;continue;}
+    }
     let previous = br.previousSibling;
     while (previous?.nodeType === 3 && !normalizedText(previous.textContent)) previous = previous.previousSibling;
     if (previous?.nodeType === 1 && previous.localName === 'br') { br.remove(); stats.removedEmptyBlocks++; }

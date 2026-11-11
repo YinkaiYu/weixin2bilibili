@@ -55,6 +55,18 @@ test('matches only one exact collection name, leaving ambiguity to the user', ()
   assert.equal(matchCollection(['正经玩'], [...collections, {id: 3, name: '正经玩'}]), null);
 });
 
+test('uses the observed question-album alias only after unambiguous exact names', () => {
+  const alias = {id: 2, name: '问答Q&A'};
+  assert.equal(matchCollection([' 问答 '], [alias]), alias);
+  const exact = {id: 1, name: '问答'};
+  assert.equal(matchCollection(['问答'], [alias, exact]), exact, 'exact name wins');
+  assert.equal(matchCollection(['问答'], [alias, {...alias,id: 3}]), null);
+  assert.equal(matchCollection(['问答'], [alias, exact, {...exact,id: 4}]), null, 'an ambiguous exact match must not fall through');
+  for (const name of ['问答精选','问答Q&A精选','问答 Q&A','问答q&a']) assert.equal(matchCollection(['问答'], [{id:3,name}]), null);
+  assert.equal(matchCollection(['Q&A'], [alias]), null);
+  assert.equal(matchCollection(['问答Q&A'], [exact]), null, 'the known alias is directional');
+});
+
 test('readback catches image loss, style loss, formula changes, and lost settings', () => {
   const payload = buildDraftPayload(options);
   const good = makeDraft(payload);
@@ -258,6 +270,37 @@ test('default normalization still catches text, styles, formulas, order, dimensi
     d=>{d.opus.content.paragraphs[1].pic.style=1;},
   ];
   for(const mutate of mutations){const actual=makeDraft(payload);mutate(actual);assert.equal(verifyDraft(payload,actual).ok,false);}
+});
+
+test('readback accepts only the observed omitted empty code language and preserves code text and real languages', () => {
+  const expected = clone(options);
+  expected.content.paragraphs.push({para_type:8,code:{lang:'',content:'first\nsecond'}});
+  const payload = buildDraftPayload(expected), actual = makeDraft(payload);
+  delete actual.opus.content.paragraphs[2].code.lang;
+  assert.equal(verifyDraft(payload,actual).ok,true);
+  for (const code of [{lang:'plaintext',content:'first\nsecond'},{content:'firstsecond'},{lang:'js',content:'first\nsecond'}]) {
+    actual.opus.content.paragraphs[2].code = code;
+    assert.equal(verifyDraft(payload,actual).ok,false);
+  }
+});
+
+test('regenerated list IDs preserve group membership while merged/split groups, levels, order and themes fail', () => {
+  const expected = clone(options);
+  const list = (text,hash,order) => ({para_type:5,format:{combine_hash:hash,list_format:{level:1,order,theme:'arabic_num'}},text:{nodes:[{node_type:1,word:{words:text}}]}});
+  expected.content.paragraphs.push(list('A','wechat-list-1',1),list('B','wechat-list-1',2),list('C','wechat-list-2',1),list('D','wechat-list-2',2));
+  const payload = buildDraftPayload(expected), actual = makeDraft(payload);
+  for(const para of actual.opus.content.paragraphs.slice(2)) para.format.combine_hash = para.format.combine_hash.replace('wechat-list-','list_1794406679297_');
+  assert.equal(verifyDraft(payload,actual).ok,true);
+  for(const mutate of [
+    d=>{d[3].format.combine_hash='split';},
+    d=>{d[4].format.combine_hash=d[5].format.combine_hash=d[2].format.combine_hash;},
+    d=>{delete d[2].format.combine_hash;},
+    d=>{d[3].format.list_format.level=2;},
+    d=>{d[3].format.list_format.order=1;},
+    d=>{d[3].format.list_format.theme='roman';},
+    d=>{[d[3],d[4]]=[d[4],d[3]];},
+  ]) {const changed=clone(actual);mutate(changed.opus.content.paragraphs);assert.equal(verifyDraft(payload,changed).ok,false);}
+  assert.equal(payload.arg.opus.content.paragraphs[2].format.combine_hash,'wechat-list-1');
 });
 
 test('readback names real font-size changes instead of treating platform reformatting as equivalent', () => {

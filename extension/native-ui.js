@@ -41,10 +41,11 @@
       .local{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px}
       .file-label{display:inline-block;cursor:pointer;color:#007dab;background:#f1f9fc;border:1px solid #d9eef6;border-radius:6px;padding:5px 10px;font-size:13px}
       .file-label[aria-disabled="true"]{opacity:.5;cursor:default}
+      .download-cover{display:block;margin-top:14px;padding:5px 10px;border:1px solid #d9eef6;border-radius:6px;background:#f1f9fc;color:#007dab;font-size:13px}.download-cover.error{border-color:#e5b8b7;color:#c43c39}
       .filename{display:block;flex:1;min-width:110px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#61666d;font-size:12px}
-      .status{margin:16px 0 0;overflow-wrap:anywhere;color:#61666d;font-size:13px;white-space:pre-line}.status.error{color:#c43c39}.status.success{color:#16845c}
+      .status{margin:16px 0 0;overflow-wrap:anywhere;color:#61666d;font-size:13px;white-space:pre-line}.status.error{color:#c43c39}.status.warning{color:#996815}.status.success{color:#16845c}
       .open,.recover,.new-draft{display:block;width:100%;margin-top:12px;min-height:40px;border:1px solid #00a1d6;border-radius:8px;color:#007dab;background:white;font-weight:600}
-      .warnings{margin-top:12px}.warnings ul{margin:10px 0 0;padding-left:18px;color:#61666d;font-size:13px;overflow-wrap:anywhere}.warnings li+li{margin-top:6px}
+      .notices{margin-top:12px}.notice-group h3{margin:12px 0 6px;font-size:13px;font-weight:600}.notice-group[data-severity="error"] h3{color:#c43c39}.notice-group[data-severity="warning"] h3{color:#996815}.notice-group ul{margin:0;padding-left:18px;color:#61666d;font-size:13px;overflow-wrap:anywhere}.notice-group li+li{margin-top:6px}
       @media(max-width:520px){.launch{right:16px;bottom:84px}.overlay{padding:16px}.dialog{padding:24px;max-height:calc(100vh - 32px)}}
     </style>
     <button class="launch" type="button">导入公众号</button>
@@ -67,15 +68,18 @@
               <input id="wechat-resource-folder" class="resource-files" type="file" webkitdirectory multiple tabindex="-1" hidden>
               <span class="filename resource-name"></span>
             </div>
+            <button class="download-cover" type="button" hidden>下载封面图</button>
           </details>
         </form>
         <p class="status" role="status" aria-live="polite" hidden></p>
         <button class="open" type="button" hidden>打开草稿</button>
         <button class="recover" type="button" hidden>已确认没有草稿，重新导入</button>
         <button class="new-draft" type="button" hidden>另建新草稿</button>
-        <details class="warnings" hidden>
-          <summary>查看提醒</summary>
-          <ul></ul>
+        <details class="notices" hidden>
+          <summary>详情</summary>
+          <section class="notice-group" data-severity="error" hidden><h3>错误</h3><ul></ul></section>
+          <section class="notice-group" data-severity="warning" hidden><h3>警告</h3><ul></ul></section>
+          <section class="notice-group" data-severity="info" hidden><h3>信息</h3><ul></ul></section>
         </details>
       </section>
     </div>`;
@@ -83,12 +87,17 @@
   const $ = selector => shadow.querySelector(selector);
   const launch = $('.launch'), overlay = $('.overlay'), form = $('form'), source = $('.url');
   const submit = $('.primary'), fileInput = $('.html-file'), resources = $('.resource-files');
-  const status = $('.status'), openButton = $('.open'), recoverButton = $('.recover'), newDraftButton = $('.new-draft'), warnings = $('.warnings');
+  const status = $('.status'), openButton = $('.open'), recoverButton = $('.recover'), newDraftButton = $('.new-draft'), notices = $('.notices');
+  const downloadButton=$('.download-cover');
   let busy = false, completed = false, saveUncertain = false, recoveredUnverified = false, draftUrl = '', priorFocus = null, controllerPromise;
+  let currentNotices=[];
+  let cover=null,coverDownloading=false,coverRevision=0,coverFailureMessage='';
 
   function showStatus(message, kind = '') {
     status.textContent = String(message || '');
     status.className = `status${kind ? ` ${kind}` : ''}`;
+    status.setAttribute('role',kind==='error'?'alert':'status');
+    status.setAttribute('aria-live',kind==='error'?'assertive':'polite');
     status.hidden = !message;
   }
 
@@ -100,11 +109,14 @@
     submit.disabled = value || completed || saveUncertain;
     recoverButton.disabled = value;
     newDraftButton.disabled = value;
+    downloadButton.disabled = value || coverDownloading;
     for (const label of shadow.querySelectorAll('.file-label')) {
       label.setAttribute('aria-disabled', String(value));
       label.tabIndex = value ? -1 : 0;
     }
     form.setAttribute('aria-busy', String(value));
+    for(const group of shadow.querySelectorAll('.more .local'))group.hidden=completed;
+    $('.more').hidden=completed&&!safeCover(cover);
   }
 
   function open(sourceUrl) {
@@ -125,6 +137,9 @@
 
   function close() {
     overlay.hidden = true;
+    coverRevision++;coverDownloading=false;
+    downloadButton.disabled=busy;
+    downloadButton.textContent=coverFailureMessage?'下载失败，重试':'下载封面图';
     if (priorFocus?.isConnected && typeof priorFocus.focus === 'function') priorFocus.focus();
   }
 
@@ -137,9 +152,9 @@
     openButton.hidden = true;
     recoverButton.hidden = true;
     newDraftButton.hidden = true;
-    warnings.hidden = true;
-    warnings.open = false;
-    warnings.querySelector('ul').replaceChildren();
+    clearCover();
+    showNotices([]);
+    notices.open = false;
     showStatus('');
     setBusy(false);
   }
@@ -158,16 +173,44 @@
     } catch { return false; }
   }
 
-  function showWarnings(messages) {
-    const list = warnings.querySelector('ul');
-    list.replaceChildren();
-    for (const message of [...new Set((messages || []).map(String).filter(Boolean))]) {
-      const li = document.createElement('li');
-      li.textContent = message;
-      list.append(li);
+  function safeCover(value) {
+    try {
+      const url=new URL(value?.url);
+      return url.protocol==='https:'&&!url.port&&!url.username&&!url.password&&url.pathname.startsWith('/bfs/')&&['hdslb.com','biliimg.com'].some(domain=>url.hostname===domain||url.hostname.endsWith(`.${domain}`))&&typeof value.filename==='string';
+    }catch{return false;}
+  }
+
+  function clearCover() {
+    cover=null;coverRevision++;coverDownloading=false;coverFailureMessage='';
+    downloadButton.hidden=true;downloadButton.disabled=false;downloadButton.textContent='下载封面图';downloadButton.classList.remove('error');
+  }
+
+  function showNotices(result,extra=[]) {
+    const ranks={info:0,warning:1,error:2},messages=new Map();
+    const legacy=(name,severity)=>(Array.isArray(result?.[name])?result[name]:[]).map(message=>({severity,message}));
+    const items=Array.isArray(result)?result:Array.isArray(result?.notices)?result.notices:[...legacy('errors','error'),...legacy('warnings','warning'),...legacy('info','info')];
+    for(const item of [...items,...extra]) {
+      const message=typeof item==='string'?item:typeof item?.message==='string'?item.message:'';
+      if(!message.trim())continue;
+      const severity=Object.hasOwn(ranks,item?.severity)?item.severity:'warning';
+      if(!messages.has(message)||ranks[severity]>ranks[messages.get(message).severity])messages.set(message,{severity,message});
     }
-    warnings.hidden = !list.childElementCount;
-    warnings.querySelector('summary').textContent = list.childElementCount ? `查看提醒（${list.childElementCount}）` : '查看提醒';
+    currentNotices=[...messages.values()];
+    const counts={error:0,warning:0,info:0};
+    for(const group of notices.querySelectorAll('.notice-group')) {
+      const severity=group.dataset.severity,list=group.querySelector('ul');list.replaceChildren();
+      for(const item of currentNotices.filter(item=>item.severity===severity)) {
+        const li=document.createElement('li');li.textContent=item.message;list.append(li);counts[severity]++;
+      }
+      group.hidden=!counts[severity];
+    }
+    notices.hidden=!currentNotices.length;
+    notices.querySelector('summary').textContent=currentNotices.length?`详情（${currentNotices.length}）`:'详情';
+    return counts;
+  }
+
+  function recordFailure(error) {
+    showNotices(currentNotices,[...(Array.isArray(error?.notices)?error.notices:[]),{severity:'error',message:error?.message||'导入失败，请重试。'}]);
   }
 
   async function openDraft() {
@@ -210,11 +253,16 @@
       openButton.hidden = false;
       recoveredUnverified = result.recovered === true && result.verified === false;
       newDraftButton.hidden = !recoveredUnverified;
-      showWarnings(result.warnings);
-      showStatus(recoveredUnverified ? '已有草稿已保留，需要检查' : result.verified === false ? '草稿已保存，需要检查' : '草稿已保存', result.verified === false ? '' : 'success');
-      if (result.verified !== false) {
+      if(safeCover(result.cover)){cover=result.cover;downloadButton.hidden=false;}
+      $('.more').open=false;
+      const verified=result.verified===true;
+      const unchecked=recoveredUnverified?'已有草稿已保留，但核验未通过':result.verified===false?'草稿已保存，但核验未通过':'草稿已保存，核验结果未确认';
+      let counts=showNotices(result);
+      if(!verified&&!counts.error)counts=showNotices(currentNotices,[{severity:'error',message:unchecked}]);
+      showStatus(!verified?unchecked:counts.error?'草稿已保存，但有错误待处理':counts.warning?'草稿已保存，请核对警告':'草稿已保存',!verified||counts.error?'error':counts.warning?'warning':'success');
+      if (verified && !counts.error) {
         try { await openDraft(); }
-        catch (error) { showStatus(`草稿已保存。${error.message || '请点击打开草稿。'}`, 'error'); }
+        catch (error) { recordFailure(error);showStatus(`草稿已保存。${error.message || '请点击打开草稿。'}`, 'error'); }
       }
     } catch (error) {
       // A controller may report a confirmed save followed by a verification
@@ -228,7 +276,9 @@
         saveUncertain = true;
         recoverButton.hidden = false;
       }
-      showStatus(error?.message || '导入失败，请重试。', 'error');
+      recordFailure(error);
+      const message=error?.message || '导入失败，请重试。';
+      showStatus(safeDraftUrl(error?.draftUrl)&&!message.includes('草稿')?`草稿已保存，但处理未完成。${message}`:message, 'error');
     } finally { setBusy(false); }
   }
 
@@ -267,7 +317,26 @@
       }
     });
   }
-  openButton.addEventListener('click', () => openDraft().catch(error => showStatus(error.message, 'error')));
+  openButton.addEventListener('click', () => openDraft().catch(error => {recordFailure(error);showStatus(error.message, 'error');}));
+  downloadButton.addEventListener('click',async()=>{
+    if(!isEditorUrl(location.href)||busy||coverDownloading||!safeCover(cover))return;
+    const revision=coverRevision,selected=cover;
+    if(coverFailureMessage)showNotices(currentNotices.filter(item=>item.message!==coverFailureMessage));
+    coverFailureMessage='';coverDownloading=true;downloadButton.disabled=true;downloadButton.classList.remove('error');downloadButton.textContent='正在下载…';
+    try{
+      const response=await chrome.runtime.sendMessage({type:'DOWNLOAD_COVER',url:selected.url,filename:selected.filename});
+      if(revision!==coverRevision)return;
+      if(response?.cancelled||response?.error?.code==='CANCELLED')return;
+      if(response?.ok!==true)throw new Error(typeof response?.error==='string'?response.error:response?.error?.message||'无法下载封面图，请重试。');
+    }catch(error){
+      if(revision!==coverRevision)return;
+      coverFailureMessage=`封面图下载失败：${error?.message||'请重试。'}`;
+      showNotices(currentNotices,[{severity:'error',message:coverFailureMessage}]);
+      downloadButton.classList.add('error');
+    }finally{
+      if(revision===coverRevision){coverDownloading=false;downloadButton.disabled=busy;downloadButton.textContent=coverFailureMessage?'下载失败，重试':'下载封面图';}
+    }
+  });
   async function restartImport(reason) {
     if (!isEditorUrl(location.href) || busy || (reason === 'uncertain' ? !saveUncertain : !recoveredUnverified)) return;
     setBusy(true);
@@ -284,6 +353,7 @@
       resetResult();
       await importArticle({ preventDefault() {} });
     } catch (error) {
+      recordFailure(error);
       showStatus(error?.message || '重新导入失败，请重试。', 'error');
     } finally { setBusy(false); }
   }

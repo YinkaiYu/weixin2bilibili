@@ -127,6 +127,35 @@ function simpleFormat(style, el) {
   return format;
 }
 
+function preformattedText(el) {
+  const clone = el.cloneNode(true);
+  for (const br of clone.querySelectorAll('br')) br.replaceWith(el.ownerDocument.createTextNode('\n'));
+  return clone.textContent || '';
+}
+
+function questionNavigationLines(el) {
+  const code = el.querySelector('code') || el;
+  if (/(?:language|lang)-[\w+-]+/.test(code.className || '') || code.querySelector('img,svg,math,table,[data-formula],[data-latex]')) return null;
+  const breaks = [...code.querySelectorAll('br')];
+  if (breaks.length < 2) return null;
+  const lines = [];
+  let previous = null;
+  for (const next of [...breaks, null]) {
+    const range = el.ownerDocument.createRange();
+    if (previous) range.setStartAfter(previous); else range.setStart(code, 0);
+    if (next) range.setEndBefore(next); else range.setEnd(code, code.childNodes.length);
+    const fragment = range.cloneContents();
+    const text = (fragment.textContent || '').replace(/\s+/g, ' ').trim();
+    if (text) lines.push({fragment, text});
+    previous = next;
+  }
+  // The source uses PRE for a styled article directory, not executable code.
+  // Require the observed heading and a consecutive question sequence so genuine
+  // code blocks and arbitrary prose keep their existing treatment.
+  if (lines.length < 3 || lines[0].text !== '问答导航' || !lines.slice(1).every((line, index) => new RegExp(`^Q${index + 1}\\s+\\S`).test(line.text))) return null;
+  return {code, lines};
+}
+
 /**
  * @param {string} html Cleaned HTML with uploaded Bilibili image URLs.
  * @param {{images?: Map<string, object>|object, document?: Document}} options
@@ -406,7 +435,17 @@ export function toOpus(html, { images = new Map(), document: owner } = {}) {
     if (el.tagName === 'HR') { paragraphs.push({ para_type: 3, line: { line_type: 1 } }); return; }
     if (el.tagName === 'PRE') {
       const code = el.querySelector('code');
-      const text = (code || el).textContent || '';
+      const navigation = questionNavigationLines(el);
+      if (navigation) {
+        const inheritedStyle = navigation.code === el ? style : stylesFor(navigation.code, style);
+        for (const {fragment} of navigation.lines) {
+          const paragraph = doc.createElement('p');
+          paragraph.append(fragment);
+          convertContainer(paragraph, inheritedStyle, context);
+        }
+        return;
+      }
+      const text = preformattedText(code || el);
       if (text) {
         const lang = code?.className?.match(/(?:language|lang)-([\w+-]+)/)?.[1] || '';
         paragraphs.push({ para_type: 8, code: { lang, content: text } });

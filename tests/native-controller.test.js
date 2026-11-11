@@ -65,6 +65,10 @@ test('native import uses real parsing/conversion, uploads PNG once for body and 
   const app=setup();try{
     const progress=[];const result=await runImport({sourceUrl},value=>progress.push(value));
     assert.equal(result.verified,true);assert.equal(result.title,'原生导入测试');
+    assert.deepEqual(result.cover,{url:uploadedImage,filename:'原生导入测试-封面.png'});
+    assert.deepEqual(result.errors,[]);assert.deepEqual(result.warnings,[]);
+    assert.ok(result.info.some(message=>message.includes('上下标已转换')));
+    assert.ok(result.notices.every(item=>item.severity==='info'));
     assert.match(result.draftUrl,/york\/read-editor\?aid=4001$/);
     assert.equal(app.uploads.length,1,'body image and identical cover must share upload');
     assert.deepEqual(app.uploads[0],validPng,'image bytes must not be re-encoded');
@@ -105,6 +109,9 @@ const collectionCases=[
   {name:'title suffix does not use substring matching',title:'手机的清晰度 | 其他正经玩',collectionName:null,expectedId:0,warning:'其他正经玩'},
   {name:'only the final title suffix is a candidate',title:'手机的清晰度 | 正经玩 | 未知栏目',collectionName:null,expectedId:0,warning:'未知栏目'},
   {name:'title without a suffix delimiter is not a collection hint',title:'正经玩',collectionName:null,expectedId:0},
+  {name:'verified question-and-answer alias uses its unique native collection',title:'为什么只睡20分钟 | No. 537',collectionName:'问答',collections:[{id:19,name:'问答Q&A'}],expectedId:19},
+  {name:'exact question-and-answer name takes precedence over its alias',collectionName:'问答',collections:[{id:18,name:'问答'},{id:19,name:'问答Q&A'}],expectedId:18},
+  {name:'ambiguous normalized aliases remain unselected',collectionName:'问答',collections:[{id:19,name:'问答Q&A'},{id:20,name:'问答 Q&A'}],expectedId:0,warning:'问答'},
 ];
 for(const fixture of collectionCases)test(`direct-link collection matching: ${fixture.name}`,async()=>{
   const app=setup({collections:fixture.collections,sourceHtml:articleHtml(fixture)});try{
@@ -137,6 +144,9 @@ test('readback interruption keeps the same job and confirms the saved ID with a 
     app.switches.failReadback=true;
     const first=await runImport({sourceUrl,html:articleHtml()});
     assert.equal(first.verified,false);assert.equal(app.pending().length,1);
+    assert.ok(first.notices.some(item=>item.severity==='error'&&item.message.includes('核验未通过')));
+    assert.ok(first.notices.some(item=>item.severity==='warning'&&item.message.includes('503')));
+    assert.ok(first.info.some(message=>message.includes('上下标已转换')));
     const pendingJob=app.pending()[0][1].jobKey;
     app.switches.failReadback=false;
     const recovered=await runImport({sourceUrl,html:articleHtml()});
@@ -175,7 +185,14 @@ test('recovery preserves user edits and only an explicit new job creates another
 test('interrupted image upload retains job and never saves a partial article',async()=>{
   const app=setup();try{
     app.switches.failUpload=true;
-    await assert.rejects(runImport({sourceUrl,html:articleHtml()}),/图片处理失败/);
+    await assert.rejects(runImport({sourceUrl,html:articleHtml()}),error=>{
+      assert.match(error.message,/图片处理失败/);
+      assert.equal(error.severity,'error');
+      assert.ok(error.notices.some(item=>item.severity==='error'&&item.message.includes('图片处理失败')));
+      assert.equal(error.imageDiagnostic.stage,'upload');
+      assert.ok(error.cause);
+      return true;
+    });
     assert.equal(app.savedPayloads.length,0);assert.equal(app.pending().length,1);
     const job=app.pending()[0][1].jobKey;
     app.switches.failUpload=false;

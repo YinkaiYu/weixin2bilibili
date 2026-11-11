@@ -11,8 +11,8 @@ import { toOpus } from '../extension/lib/opus.js';
 const directory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '测试文章');
 const document = new JSDOM('').window.document;
 const cases = [
-  { name: '不抽血不拍片，闻一闻就能接收身体警报？？？.html', raster: 0, images: 4, formulas: 0, captions: 1 },
-  { name: '为什么只睡20分钟，下午就能精神满满？_ No. 537.html', raster: 0, images: 9, formulas: 26, captions: 3 },
+  { name: '不抽血不拍片，闻一闻就能接收身体警报？？？.html', raster: 0, images: 3, formulas: 0, captions: 1 },
+  { name: '为什么只睡20分钟，下午就能精神满满？_ No. 537.html', raster: 0, images: 7, formulas: 26, captions: 3 },
   { name: '你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html', raster: 1, images: 16, formulas: 11, captions: 4 },
   { name: '摸了半天找不到头，胶带却记得你撕到哪儿？.html', raster: 0, images: 12, formulas: 4, captions: 9 },
   { name: '要宣布翻篇了？那我磁化损失呢，厉娜.html', raster: 0, images: 21, formulas: 0, captions: 19 },
@@ -105,8 +105,18 @@ for (const sample of cases) {
     }
     if (sample.name.includes('No. 537')) {
       for(let q=1;q<=12;q++) assert.match(nativeText,new RegExp(`Q\\s*${q}(?!\\d)`),`Q${q}必须保留为原生文字`);
-      assert.ok(nativeWords.some(word => word.words.includes('火箭发射时') && word.color === '#2e3191'), '原有蓝色图注须作为正文完整保留颜色');
+      const textOf=paragraph=>(paragraph.text?.nodes||[]).map(node=>node.word?.words||'').join('').trim();
+      const navigationIndex=result.content.paragraphs.findIndex(p=>textOf(p)==='问答导航');
+      assert.ok(navigationIndex>=0);
+      const navigation=result.content.paragraphs.slice(navigationIndex,navigationIndex+13);
+      assert.equal(navigation.length,13);
+      assert.ok(navigation.every(p=>p.para_type===1),'目录应保留13行普通可编辑文字，不能变成代码块');
+      for(let q=1;q<=12;q++)assert.match(textOf(navigation[q]),new RegExp(`^Q${q}\\s+\\S`));
+      assert.equal(result.content.paragraphs.filter(p=>p.code).length,0);
+      assert.ok(!nativeText.includes('火箭发射时'),'投票后的上期文章尾部不能导入');
+      assert.ok(!nativeText.includes('上期也精彩'));
     }
+    if (sample.name.includes('不抽血')) assert.ok(!nativeText.includes('福利时间'),'福利活动尾部不能导入');
     if (sample.name.includes('厉娜')) assert.ok(nativeWords.some(word=>word.color==='#ffffff' && word.bg_style?.color?.color==='#ae430e'),'白字标题必须保留祖先棕色底，防止白底白字');
   });
 }

@@ -4,6 +4,8 @@ import {prepareForNative} from './raster.js';
 import {downloadImage,migrateImages} from './media.js';
 import {indexLocalFiles} from './local-files.js';
 import {createBridgeClient,bridgeFetch} from './bridge.js';
+import {classifyImportMessages,noticeFields,importFailure} from './import-notices.js';
+import {matchCollection} from './bilibili.js';
 
 async function hashText(text){const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text));return [...new Uint8Array(bytes)].map(b=>b.toString(16).padStart(2,'0')).join('');}
 async function loadSource(url){
@@ -23,10 +25,17 @@ function chooseCollection(names,collections,title=''){
   // is only a fallback candidate; it cannot override explicit source metadata.
   const suffix=String(title||'').match(/[|｜]([^|｜]+)$/u)?.[1]?.trim();
   const candidates=explicitNames.length?explicitNames:suffix?[suffix]:[];
-  const found=collections.filter(c=>candidates.some(n=>normalize(n)===normalize(c.name)));
-  return {collection:found.length===1?found[0]:null,candidates};
+  const collection=matchCollection(candidates.map(normalize),collections.map(item=>({...item,name:normalize(item.name)})));
+  return {collection,candidates};
 }
-export async function runImport({sourceUrl='',html='',localFiles:files=[]},onProgress=()=>{}){
+function downloadableCover(title,migrated){
+  const mime=migrated.images.get(migrated.coverUrl)?.mime;
+  const extension=({'image/png':'png','image/jpeg':'jpg','image/gif':'gif','image/webp':'webp'})[mime];
+  if(!migrated.coverUrl||!extension)return null;
+  const name=String(title||'公众号文章').normalize('NFKC').replace(/[<>:"/\\|?*\u0000-\u001f]/g,'_').trim().replace(/[. ]+$/,'').slice(0,100)||'公众号文章';
+  return {url:migrated.coverUrl,filename:`${name}-封面.${extension}`};
+}
+async function importArticle({sourceUrl='',html='',localFiles:files=[]},onProgress=()=>{}){
   if(!html){let url;try{url=new URL(sourceUrl);}catch{throw new Error('请输入微信公众号文章链接。');}
     if(url.protocol!=='https:'||url.hostname!=='mp.weixin.qq.com'||!/^\/s(?:\/|$)/.test(url.pathname))throw new Error('请输入 https://mp.weixin.qq.com/s/ 开头的文章链接。');
     onProgress('正在读取文章…');html=await loadSource(url.href);
@@ -58,11 +67,19 @@ export async function runImport({sourceUrl='',html='',localFiles:files=[]},onPro
   if(native.blockingIssues.length)throw new Error(native.blockingIssues.join('\n'));
   onProgress('正在保存并核对草稿…');
   const result=await client.saveDraft({jobKey,title:article.title,content:native.content,summary:native.summary,coverUrl:migrated.coverUrl,collectionId:collection?.id,original:true});
-  const warnings=[...prepared.warnings,...native.warnings];
-  if(!collection&&candidates.length)warnings.push(`未找到唯一对应的文集（${candidates.join('、')}），请在发布设置中选择。`);
-  if(result.verified===false){warnings.unshift(...(result.verification?.issues||['草稿已保存，读回检查未通过，请核对。']));}
-  else await chrome.storage.local.remove(pendingKey);
-  return {...result,warnings:[...new Set(warnings)],title:article.title};
+  const outcome=[];
+  if(!collection&&candidates.length)outcome.push({severity:'warning',message:`未找到唯一对应的文集（${candidates.join('、')}），请在发布设置中选择。`});
+  if(result.verified!==true){
+    outcome.push({severity:'error',message:result.verified===false?'草稿已保存，但核验未通过。':'草稿已保存，但尚未确认核验结果。'});
+    outcome.push(...(result.verification?.issues||[]).map(message=>({severity:'warning',message})));
+  }else await chrome.storage.local.remove(pendingKey);
+  const notices=classifyImportMessages(article.warnings,article.notices,prepared.warnings,prepared.notices,cleaned.warnings,cleaned.notices,native.warnings,native.notices,result.warnings,result.notices,outcome);
+  return {...result,...noticeFields(notices),title:article.title,cover:downloadableCover(article.title,migrated)};
+}
+
+export async function runImport(options,onProgress=()=>{}){
+  try{return await importArticle(options,onProgress);}
+  catch(error){throw importFailure(error);}
 }
 
 /** Only called after the user explicitly confirms that no draft was created. */

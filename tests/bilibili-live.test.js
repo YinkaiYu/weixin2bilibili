@@ -89,7 +89,7 @@ test('historical saved draft matches its source text and formulas; true formatti
     // 20/22/24px source headings are now native headings rather than paragraphs.
     assert.ok(before[p].para_type===after[p].para_type || (before[p].para_type===9&&after[p].para_type===1));
     const wanted=before[p].text?.nodes||[],actual=after[p].text?.nodes||[];
-    assert.equal(wanted.length,actual.length);
+    assert.equal(wanted.length,actual.length,`text node count in paragraph ${p}`);
     for(let n=0;n<wanted.length;n++){
       assert.equal(wanted[n].node_type,actual[n].node_type);
       if(wanted[n].node_type===5){assert.equal(wanted[n].formula.latex_content,actual[n].formula.latex_content);formulaCount++;}
@@ -132,4 +132,58 @@ test('historical live response default fields and CDN alias are wire-format equi
   assert.deepEqual(verifyDraft(payload,draft),{ok:true,issues:[]});
   const changed=structuredClone(draft);changed.opus.content.paragraphs[0].format.align=2;
   assert.equal(verifyDraft(payload,changed).ok,false);
+});
+
+const qaExpectedPath=path.join(root,'test-artifacts','expected-native-v0.1.6','EpDtKCqGK6qVekxIabvQ1Q.expected-native.json');
+const qaDraftPath=path.join(root,'test-artifacts','qa-draft-390326-readback.json');
+const qaSkip=!(fs.existsSync(qaExpectedPath)&&fs.existsSync(qaDraftPath))&&'本地问答预期快照或真实 API 读回记录未附带。';
+
+test('Q&A API matches source content after explicitly isolating three observed caption fallbacks and proven wire defaults',{skip:qaSkip},()=>{
+  // Freeze the offline v0.1.6 source conversion. The current cleaner now removes
+  // the voting footer and the converter fixes navigation: neither new behavior
+  // should be falsely required of this already-saved historical draft.
+  const snapshot=JSON.parse(fs.readFileSync(qaExpectedPath,'utf8'));
+  const draft=JSON.parse(fs.readFileSync(qaDraftPath,'utf8')).data.draft;
+  const content=structuredClone(snapshot.content), paragraphs=[];
+  const uploaded=draft.opus.content.paragraphs.flatMap(p=>p.pic?.pics||[]);
+  assert.equal(uploaded.length,9);
+  let imageIndex=0,captionIndex=0;
+  for(const paragraph of content.paragraphs) {
+    paragraphs.push(paragraph);
+    for(const pic of paragraph.pic?.pics||[]) {
+      // As in the earlier fixture, the save request/upload cache is unavailable.
+      // Bind uploaded identities/dimensions by occurrence; do not claim this
+      // fixture independently proves the visual identity of the uploaded files.
+      const actual=uploaded[imageIndex++];
+      Object.assign(pic,{url:actual.url,width:actual.width,height:actual.height,size:actual.size});
+      if(!pic.comment)continue;
+      // The live response has three body captions with this exact gray/pale
+      // panel styling, unlike the offline snapshot's plain native comments.
+      // Isolate that OBSERVED browser-path difference explicitly. Caption text
+      // comes from the source snapshot; this fixture does not independently
+      // prove why the live cleaner retained that background. The parser's
+      // separate longhand-CSS tests cover the fix. Everything else (all body
+      // words, formulas and formatting) stays independently source-derived.
+      const words=pic.comment; delete pic.comment;
+      paragraphs.push({para_type:1,format:captionIndex<2?{align:1}:{},text:{nodes:[{node_type:1,word:{
+        words,font_size:13,font_level:'small',color:'#888888',dark_color:'',style:{},
+        bg_style:{style:1,color:{color:'#efeff6',dark_color:''}},
+      }}]}});
+      captionIndex++;
+    }
+  }
+  assert.equal(captionIndex,3);
+  assert.equal(paragraphs.length,179);
+  assert.equal(paragraphs.flatMap(p=>p.text?.nodes||[]).filter(n=>n.node_type===5).length,26);
+  assert.equal(paragraphs.find(p=>p.code).code.lang,'');
+  assert.equal(draft.opus.content.paragraphs.find(p=>p.code).code.lang,undefined);
+  const payload=buildDraftPayload({title:snapshot.title,content:{paragraphs},coverUrl:draft.image_urls[0].replace('article.biliimg.com','i0.hdslb.com'),original:true});
+  assert.deepEqual(verifyDraft(payload,draft),{ok:true,issues:[]});
+  for(const mutate of [
+    d=>{d.opus.content.paragraphs[0].text.nodes[0].word.words+='改字';},
+    d=>{d.opus.content.paragraphs.find(p=>p.pic).pic.pics[0].width++;},
+    d=>{d.opus.content.paragraphs.find(p=>p.code).code.content+='\n';},
+    d=>{d.opus.content.paragraphs.find(p=>p.text?.nodes.some(n=>n.node_type===5)).text.nodes.find(n=>n.node_type===5).formula.latex_content+='x';},
+    d=>{d.opus.content.paragraphs.find(p=>p.para_type===5||p.para_type===6).format.combine_hash='new-split-group';},
+  ]) {const changed=structuredClone(draft);mutate(changed);assert.equal(verifyDraft(payload,changed).ok,false);}
 });

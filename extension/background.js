@@ -15,6 +15,23 @@ chrome.action.onClicked.addListener(async tab=>{
   await chrome.tabs.create({url:EDITOR+'#wechat-import'+(sourceUrl?'?source='+encodeURIComponent(sourceUrl):'')});
 });
 function trusted(sender){return isTrustedNativeSender(sender,chrome.runtime.id);}
+async function downloadCover(message){
+  let url;try{url=new URL(message.url);}catch{throw new Error('封面地址无效。');}
+  if(url.protocol!=='https:'||url.port||url.username||url.password||!url.pathname.startsWith('/bfs/')||!/(^|\.)(hdslb\.com|biliimg\.com)$/.test(url.hostname))throw new Error('仅可下载已转存到 B站的封面。');
+  const requested=String(message.filename||'文章封面.jpg');
+  const extension=requested.match(/\.(jpe?g|png|gif|webp|avif)$/i)?.[1]?.toLowerCase();
+  if(!extension)throw new Error('封面文件格式无效。');
+  let base=requested.slice(0,-extension.length-1).replace(/[<>:"/\\|?*\u0000-\u001f\u007f]/g,'_').replace(/[. ]+$/g,'').trim();
+  base=Array.from(base).slice(0,100).join('')||'文章封面';
+  if(/^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(base))base='封面-'+base;
+  try{
+    const downloadId=await chrome.downloads.download({url:url.href,filename:`${base}.${extension}`,saveAs:true,conflictAction:'uniquify'});
+    return {ok:true,downloadId};
+  }catch(error){
+    if(/cancel(?:ed|led)|USER_CANCELED|用户.*取消/i.test(String(error?.message||'')))return {ok:false,cancelled:true};
+    throw new Error('封面下载未能开始，请重试。');
+  }
+}
 async function loadArticle(sourceUrl){
   let url;try{url=new URL(sourceUrl);}catch{throw new Error('文章链接无效。');}
   if(url.protocol!=='https:'||url.hostname!=='mp.weixin.qq.com'||url.username||url.password||!/^\/s(?:\/|$)/.test(url.pathname))throw new Error('仅支持微信公众号文章链接。');
@@ -27,9 +44,10 @@ async function loadArticle(sourceUrl){
   return {html};
 }
 chrome.runtime.onMessage.addListener((message,sender,sendResponse)=>{
-  if(!['BILI_API','DOWNLOAD_IMAGE','LOAD_ARTICLE','OPEN_SAVED_DRAFT'].includes(message?.type))return;
+  if(!['BILI_API','DOWNLOAD_IMAGE','DOWNLOAD_COVER','LOAD_ARTICLE','OPEN_SAVED_DRAFT'].includes(message?.type))return;
   (async()=>{
     if(!trusted(sender))throw new Error('不允许从此页面调用导入功能。');
+    if(message.type==='DOWNLOAD_COVER')return downloadCover(message);
     if(message.type==='BILI_API'||message.type==='DOWNLOAD_IMAGE')return handleAPI(message,sender);
     if(message.type==='LOAD_ARTICLE')return {ok:true,data:await loadArticle(message.sourceUrl)};
     let draft;try{draft=new URL(message.draftUrl);}catch{throw new Error('草稿地址无效。');}

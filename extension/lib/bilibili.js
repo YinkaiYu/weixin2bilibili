@@ -38,7 +38,13 @@ export function normalizeBiliImageUrl(value) {
 export function matchCollection(names, collections) {
   const normalized = new Set((names || []).map(value => String(value).trim()).filter(Boolean));
   const matches = (collections || []).filter(item => normalized.has(String(item.name).trim()));
-  return matches.length === 1 ? matches[0] : null;
+  if (matches.length) return matches.length === 1 ? matches[0] : null;
+  // The user's native collection selector was checked on 2026-11-11: the
+  // WeChat album 问答 corresponds to the Bilibili collection 问答Q&A. This is
+  // one explicit alias, not a substring/fuzzy match for unrelated collections.
+  const aliases = normalized.has('问答') ? new Set(['问答Q&A']) : new Set();
+  const aliasMatches = (collections || []).filter(item => aliases.has(String(item.name).trim()));
+  return aliasMatches.length === 1 ? aliasMatches[0] : null;
 }
 
 function numericId(value, label, allowZero = false) {
@@ -147,8 +153,19 @@ function backgroundStyle(value) {
 }
 
 function canonicalContent(content) {
+  const listHashes = new Set((content?.paragraphs || []).filter(para => [5,6].includes(Number(para.para_type)))
+    .map(para => para.format?.combine_hash).filter(hash => typeof hash === 'string' && hash));
+  const listGroups = new Map();
   return (content?.paragraphs || []).map(para => {
     const base = {type: Number(para.para_type), format: paragraphFormat(para.format)};
+    // The live Q&A readback and the official CombineHashContext show that the
+    // editor regenerates list IDs. Compare the grouping relation, not the
+    // opaque ID: splitting, merging or moving members still changes this map.
+    const hash = base.format.combine_hash;
+    if ([1,5,6].includes(base.type) && listHashes.has(hash)) {
+      if (!listGroups.has(hash)) listGroups.set(hash, listGroups.size + 1);
+      base.format.combine_hash = `list-group-${listGroups.get(hash)}`;
+    }
     if (para.text) base.text = (para.text.nodes || []).map(node => {
       if (node.node_type === 1) {
         const word = node.word || {};
@@ -163,7 +180,13 @@ function canonicalContent(content) {
       base.pictures = (para.pic.pics || []).map(pic => ({url: imageIdentity(pic.url), width: Number(pic.width), height: Number(pic.height), comment: pic.comment || ''}));
     }
     if (para.line) base.line = stable(para.line);
-    if (para.code) base.code = stable(para.code);
+    if (para.code) {
+      const code = {...para.code};
+      // The live Q&A API omits the protobuf default lang:"". Nonempty language
+      // values and the complete code content (including newlines) stay strict.
+      if (code.lang === '') delete code.lang;
+      base.code = stable(code);
+    }
     return base;
   });
 }
