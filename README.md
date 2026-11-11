@@ -1,6 +1,8 @@
-<img src="extension/icons/icon-128.png" alt="weixin2bilibili 图标" width="80" height="80">
+<p align="center">
+  <img src="extension/icons/icon-128.png" alt="weixin2bilibili 图标" width="96" height="96">
+</p>
 
-# 插件：把微信公众号文章导入B站专栏
+<h1 align="center">插件：把微信公众号文章导入B站专栏</h1>
 
 weixin2bilibili 是物理所内部的 B站运营工具，服务账号「二次元的中科院物理所」。把微信公众号文章导入 B站专栏，在 B站原生编辑器中修改、预览和发布。
 
