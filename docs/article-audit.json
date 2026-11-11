@@ -1,0 +1,382 @@
+{
+  "schemaVersion": 1,
+  "verification": "Local HTML parsing only. Page scripts were not executed; no external requests were made. Bilibili save/readback is a separate integration check.",
+  "localAssetResolution": "Match sourceUrl to selected File using localPath relative to the saved HTML folder. data-src remains the original remote URL; localasset:/// + encodeURIComponent(localPath) is used only when no remote image source exists. Read image bytes and substitute an object/data URL for preview, then upload original bytes. Do not infer resource mapping by filename alone.",
+  "articles": [
+    {
+      "file": "不抽血不拍片，闻一闻就能接收身体警报？？？.html",
+      "title": "不抽血不拍片，闻一闻就能接收身体警报？？？",
+      "sourceUrl": "https://mp.weixin.qq.com/s/qAhiPINJ1TQUkEEyIdL45w",
+      "coverUrl": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJVoJ0KUydL6lmw6WYRGZExYicvibCXeLrk9ZD66EThQzAatH49jwfyxqSaGIEjsALvP6y5o1w8SCvMdTWj18ibRHEIWcYLVBTe9Lk/0?wx_fmt=jpeg",
+      "collectionNames": [
+        "翻译专栏"
+      ],
+      "source": {
+        "imageElements": 5,
+        "imagesWithRemoteDataSrc": 5
+      },
+      "retained": {
+        "removedLinks": 1,
+        "removedEmptyBlocks": 149,
+        "removedImagePlaceholders": 0,
+        "removedEmptySvg": 24,
+        "removedTransparentBackgrounds": 0,
+        "trimmedTail": 1,
+        "images": 4,
+        "gifs": 0,
+        "formulas": 0,
+        "backgrounds": 1,
+        "superscripts": 0,
+        "subscripts": 0
+      },
+      "formatting": {
+        "boldNodes": 67,
+        "coloredNodes": 162,
+        "colors": [
+          "rgb(172, 57, 255)",
+          "rgb(249, 110, 87)",
+          "rgb(0, 0, 0)",
+          "rgb(89, 89, 89)",
+          "rgb(64, 118, 0)",
+          "rgb(93, 71, 139)",
+          "rgb(136, 136, 136)",
+          "rgb(62, 62, 62)",
+          "black",
+          "rgb(255, 255, 255)",
+          "rgb(254, 188, 0)",
+          "rgb(254, 156, 0)",
+          "rgb(122, 79, 214)",
+          "rgb(255, 104, 39)",
+          "rgb(190, 26, 29)",
+          "rgb(34, 34, 34)"
+        ],
+        "formulas": []
+      },
+      "blockingIssues": [
+        "原文含 CSS 背景图，需要转换对应局部排版后同步。"
+      ],
+      "warnings": [
+        "已删除回顾／近期热门文章标题及其后面的内容。",
+        "已清除 1 处外链（保留链接文字和图片）。"
+      ],
+      "localAssets": [],
+      "backgrounds": [
+        {
+          "url": "https://mmbiz.qpic.cn/mmbiz_png/QAEJXB03eMCUWwsjQAQWz2S3X65PndTa7YfibSCjXwoyc11v0mc5oK1AViarw0CoEQWItPRaRHsLXXiboc89Y323A/640?wx_fmt=png&tp=webp&wxfrom=15&wx_lazy=1",
+          "textPreview": "【互动问题：你身边有没有“鼻子特别灵”的人呢？或者听说过猫狗能闻出主人生病这种事呢？】请大",
+          "requiresLocalLayoutConversion": true
+        }
+      ]
+    },
+    {
+      "file": "为什么只睡20分钟，下午就能精神满满？_ No. 537.html",
+      "title": "为什么只睡20分钟，下午就能精神满满？| No. 537",
+      "sourceUrl": "https://mp.weixin.qq.com/s/EpDtKCqGK6qVekxIabvQ1Q",
+      "coverUrl": "https://mmbiz.qpic.cn/sz_mmbiz_jpg/Q5JJsLWYMJW8TkC8hMazoBkDk7m51lSDFPRdHftaJJVfibuT2nbAYVD3T89VgH7CqwDU8It0poEh5OY6dljcSmkHvJU1w7p1BHOZerjicrQFY/0?wx_fmt=jpeg",
+      "collectionNames": [
+        "问答"
+      ],
+      "source": {
+        "imageElements": 11,
+        "imagesWithRemoteDataSrc": 10
+      },
+      "retained": {
+        "removedLinks": 12,
+        "removedEmptyBlocks": 14,
+        "removedImagePlaceholders": 1,
+        "removedEmptySvg": 0,
+        "removedTransparentBackgrounds": 11,
+        "trimmedTail": 1,
+        "images": 9,
+        "gifs": 0,
+        "formulas": 7,
+        "backgrounds": 1,
+        "superscripts": 19,
+        "subscripts": 0
+      },
+      "formatting": {
+        "boldNodes": 174,
+        "coloredNodes": 326,
+        "colors": [
+          "rgb(62, 62, 62)",
+          "rgba(0, 0, 0, 0.9)",
+          "rgb(0, 0, 0)",
+          "rgb(214, 214, 214)",
+          "rgb(128, 128, 128)",
+          "rgb(46, 49, 145)",
+          "rgb(89, 89, 89)",
+          "rgb(1, 1, 1)",
+          "rgb(136, 136, 136)"
+        ],
+        "formulas": [
+          "I\\approx\\frac{220\\ \\mathrm{V}}{3.2\\ \\mathrm{M}\\Omega}\\approx70\\ \\mu\\mathrm{A}",
+          "d\\sin\\theta=m\\lambda\n",
+          "d",
+          "\\theta",
+          "m",
+          "\\lambda",
+          "\\theta"
+        ]
+      },
+      "blockingIssues": [
+        "原文含 CSS 背景图，需要转换对应局部排版后同步。"
+      ],
+      "warnings": [
+        "已删除回顾／近期热门文章标题及其后面的内容。",
+        "已清除 12 处外链（保留链接文字和图片）。",
+        "已清除 1 个没有内容的微信图片占位标签。"
+      ],
+      "localAssets": [
+        {
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJWicDHiae9kMT8qAm6ibyTqSDVXyYiawjn8hDDsF9CEuDwSXDEseiaX7K1SjoK5x8PYLKCHThLXQQ7y0eYia74buBeCWGvrJxPYf50P0/640?wx_fmt=png&from=appmsg#imgIndex=0",
+          "localPath": "为什么只睡20分钟，下午就能精神满满？_ No. 537_files/640",
+          "available": true
+        }
+      ],
+      "backgrounds": [
+        {
+          "url": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJXp1PFMFAUuJF5rp74NTZy4LyUNMGaCBTtNwHiaAw4GLpSghdfpCG0KsibJSDnS4vdtWUSBgA1wEbIIljeiaje25rkica4VTuibon48/640?wx_fmt=webp&from=appmsg&tp=webp&wxfrom=15&wx_lazy=1",
+          "textPreview": "Q1",
+          "requiresLocalLayoutConversion": true
+        }
+      ]
+    },
+    {
+      "file": "你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html",
+      "title": "你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ | 正经玩",
+      "sourceUrl": "https://mp.weixin.qq.com/s/U5VRFwJgY6bEneGCTuGcNg",
+      "coverUrl": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJWOFjB3xPPD8kc4xhicGDkmqHVZUuicHQP65XJwUSZcTuZ9CJyAa3j6KjUCw70phMYIIBI1HbxYTotSz3o86TCY3EfZgazCScdg0/0?wx_fmt=jpeg",
+      "collectionNames": [
+        "正经玩"
+      ],
+      "source": {
+        "imageElements": 63,
+        "imagesWithRemoteDataSrc": 26
+      },
+      "retained": {
+        "removedLinks": 0,
+        "removedEmptyBlocks": 129,
+        "removedImagePlaceholders": 9,
+        "removedEmptySvg": 0,
+        "removedTransparentBackgrounds": 1,
+        "trimmedTail": 1,
+        "images": 16,
+        "gifs": 1,
+        "formulas": 4,
+        "backgrounds": 0,
+        "superscripts": 0,
+        "subscripts": 7
+      },
+      "formatting": {
+        "boldNodes": 38,
+        "coloredNodes": 47,
+        "colors": [
+          "rgb(0, 128, 255)",
+          "rgb(62, 62, 62)",
+          "rgb(136, 136, 136)",
+          "rgb(34, 34, 34)",
+          "rgb(255, 255, 255)",
+          "rgb(0, 0, 0)",
+          "rgb(255, 0, 0)"
+        ],
+        "formulas": [
+          "[\nd_1=\\frac{25.4}{264}\\ \\mathrm{mm}\n\\approx96.2\\ \\mu\\mathrm m\n]",
+          "[\nd_2=\\frac{25.4}{460}\\ \\mathrm{mm}\n\\approx55.2\\ \\mu\\mathrm m\n]",
+          "[\nS\\approx\n\\frac{R\\lambda}{d\\cos^2\\theta}\n]",
+          "[\nd\\approx\n\\frac{R\\lambda}{S\\cos^2\\theta}\n]"
+        ]
+      },
+      "blockingIssues": [],
+      "warnings": [
+        "已删除回顾／近期热门文章标题及其后面的内容。",
+        "已清除 9 个没有内容的微信图片占位标签。"
+      ],
+      "localAssets": [
+        {
+          "sourceUrl": "https://res.wx.qq.com/t/wx_fed/we-emoji/res/assets/newemoji/Yellowdog.png#imgIndex=23",
+          "localPath": "你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩_files/Yellowdog.png",
+          "available": true
+        }
+      ],
+      "backgrounds": []
+    },
+    {
+      "file": "摸了半天找不到头，胶带却记得你撕到哪儿？.html",
+      "title": "摸了半天找不到头，胶带却记得你撕到哪儿？",
+      "sourceUrl": "https://mp.weixin.qq.com/s/mqgtKG5YD2F-5n4rxRt4iw",
+      "coverUrl": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJXiaS27JmUA4fy6zDvicGwxfv20k6VsNd7onf95QExNiaGaW8jQViaUfCVqTKVFrfnzibTeKZDILr20s1JmOlibnQcz212XeMZhxO8xk/0?wx_fmt=jpeg",
+      "collectionNames": [
+        "线上科学日"
+      ],
+      "source": {
+        "imageElements": 13,
+        "imagesWithRemoteDataSrc": 13
+      },
+      "retained": {
+        "removedLinks": 0,
+        "removedEmptyBlocks": 2,
+        "removedImagePlaceholders": 0,
+        "removedEmptySvg": 0,
+        "removedTransparentBackgrounds": 0,
+        "trimmedTail": 1,
+        "images": 12,
+        "gifs": 0,
+        "formulas": 0,
+        "backgrounds": 0,
+        "superscripts": 0,
+        "subscripts": 4
+      },
+      "formatting": {
+        "boldNodes": 37,
+        "coloredNodes": 81,
+        "colors": [
+          "rgb(56, 45, 41)",
+          "rgb(134, 122, 114)",
+          "rgb(167, 82, 50)",
+          "rgb(130, 66, 46)",
+          "rgb(136, 136, 136)"
+        ],
+        "formulas": []
+      },
+      "blockingIssues": [],
+      "warnings": [
+        "已删除回顾／近期热门文章标题及其后面的内容。"
+      ],
+      "localAssets": [
+        {
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJWdMliayhib97rzqYPl4ibhdiccdC4CPcKZYeMg9JvrIVGnYbcbMpCX05wPVd5OiadUBnHhB8PaHCyLGG0I0GPjJRqGRnQuRbPJADN4/640?wx_fmt=png&from=appmsg#imgIndex=0",
+          "localPath": "摸了半天找不到头，胶带却记得你撕到哪儿？_files/640",
+          "available": true
+        },
+        {
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJWWCViaQy2bQlGZSp3HicdV0viciaNibk6iaYP0AfBuQu1fE9db8okdp22lVJE0GQiaw6dYJx1MicCcbBLzmAB4VrTg7FibctcSGiar4ZeTw/640?wx_fmt=png&from=appmsg#imgIndex=1",
+          "localPath": "摸了半天找不到头，胶带却记得你撕到哪儿？_files/640(1)",
+          "available": true
+        }
+      ],
+      "backgrounds": []
+    },
+    {
+      "file": "要宣布翻篇了？那我磁化损失呢，厉娜.html",
+      "title": "要宣布翻篇了？那我磁化损失呢，厉娜",
+      "sourceUrl": "https://mp.weixin.qq.com/s/kwArjMCzzV1fxRtz_hyksw",
+      "coverUrl": "https://mmbiz.qpic.cn/mmbiz_jpg/Q5JJsLWYMJUQozuv5DYJXqBn1BCgXHX71xicNwnW0J5H2xKv0xFuja63H34ghib5811cp8lp4Tnrkqn4u0Kx490ibIlvVUQjIqVRzS7fkPBqXE/0?wx_fmt=jpeg",
+      "collectionNames": [
+        "线上科学日"
+      ],
+      "source": {
+        "imageElements": 65,
+        "imagesWithRemoteDataSrc": 65
+      },
+      "retained": {
+        "removedLinks": 0,
+        "removedEmptyBlocks": 273,
+        "removedImagePlaceholders": 0,
+        "removedEmptySvg": 15,
+        "removedTransparentBackgrounds": 0,
+        "trimmedTail": 1,
+        "images": 64,
+        "gifs": 0,
+        "formulas": 0,
+        "backgrounds": 0,
+        "superscripts": 0,
+        "subscripts": 0
+      },
+      "formatting": {
+        "boldNodes": 94,
+        "coloredNodes": 166,
+        "colors": [
+          "rgb(62, 62, 62)",
+          "rgb(0, 0, 0)",
+          "rgb(240, 106, 45)",
+          "rgb(174, 67, 14)",
+          "rgb(255, 127, 170)",
+          "rgb(107, 117, 113)",
+          "rgb(255, 255, 255)",
+          "rgb(37, 44, 44)",
+          "rgb(136, 136, 136)",
+          "rgb(178, 178, 178)",
+          "rgb(160, 160, 160)"
+        ],
+        "formulas": []
+      },
+      "blockingIssues": [],
+      "warnings": [
+        "已删除回顾／近期热门文章标题及其后面的内容。"
+      ],
+      "localAssets": [
+        {
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJUgWzYQ4YibDBNQnPvFy5a4tyzWtTELMFQhOQcHC8VhSt8dvdqc7XhQRibqcErGcdEyLKVQ9Ly057zDrBKgNfsNDFPu53zZyn0tE/640?wx_fmt=png&from=appmsg#imgIndex=0",
+          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640",
+          "available": true
+        },
+        {
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJVib8nfqMDibiaiaoEEO2iaiaqO4Fric7nQCJCQxZUbXbaLibckEAT44TVdR297YYvGtSTQJ2bibSIpz83T2N6zxicEM8jp922M0z6tblpmk/640?wx_fmt=png&from=appmsg#imgIndex=1",
+          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(1)",
+          "available": true
+        },
+        {
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJUXV0nNxkrHV5jARdynE0XodLyh1f1F0ZtQsDItzRXhBq4Bwl3PNiaCMxKt8ROAaibgDibW2Piby8MCmL2icsuuJkibVAKqBl2b8KZy4/640?wx_fmt=png&from=appmsg#imgIndex=2",
+          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(2)",
+          "available": true
+        },
+        {
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJXgfaiarNOHWFD2zsarngWsCFSQ4XDIBicXvSjTnSaImLlPib5sicgSO7LmBwlU1YjdXSbqJK1BYQZHGsBHIKIR3fEyYAN5fB0WQTo/640?wx_fmt=png&from=appmsg#imgIndex=3",
+          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(3)",
+          "available": true
+        },
+        {
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJVymW3L5EdOeQwJiaabS39CRr1xnGZuXBjmbeGicUtqFnj4U8icQeDAMk3HK6FlGDL2W41p06Dk7Oibkw75XVTjBRQlicfNItib7dmz0/640?wx_fmt=png&from=appmsg#imgIndex=4",
+          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(4)",
+          "available": true
+        },
+        {
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJUibnCc0SwNCjZYDXpy9EJzD3FzXpiae39SJRagYNDtPbOGRQhQG0oKCibics9RChWv0GhPCKUW7ZsvQEwKiawp3xKeJ0w6QT2xFZVY/640?wx_fmt=png&from=appmsg#imgIndex=5",
+          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(5)",
+          "available": true
+        },
+        {
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJUm2lZD0zJLVLXT6YnpYUicLTvxicCPK0YmurOMuzMV40m0uaMRW0JOwJwd2sa2qt6ZDVTtjGia4iaiciaTwoNiaJPNLh8l4DN0IAkRYE/640?wx_fmt=png&from=appmsg#imgIndex=6",
+          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(6)",
+          "available": true
+        },
+        {
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJV30mwjicRXXnzVpRcUFzGYegcVh7vnwPF31picqUxskCrxwXibx8rXKCtjSn9ofcHCA1QKDSL5rPhESLE7OJuqYrr0JKVyM5K10E/640?wx_fmt=png&from=appmsg#imgIndex=7",
+          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(7)",
+          "available": true
+        },
+        {
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJWS9l5PL5eGAPTnia3lpNDckFzicXGYQHWB7bDlfOUzrIic0TaCUmdaoIRBIQgEj3TyP6fJKHNxB8jicmcS7cHWaoSRahzZ1kdzn6I/640?wx_fmt=png&from=appmsg#imgIndex=8",
+          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(8)",
+          "available": true
+        },
+        {
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJUHCcBRrQVjricwZNiaVyzrkEEWOAwWPLw1KrVAE0X5R0BibGWoT8qeRTVzTWoWqgXFff7WbYSeav5I5nuZ65qM3mVduLUvULILic8/640?wx_fmt=png&from=appmsg#imgIndex=9",
+          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(9)",
+          "available": true
+        },
+        {
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJUe6LrN9E3rx3LPXkZDK4J9RibicOGtN2WOWUV5l6ofOvBiaDuDD9vNAqRmJdfKZSAmOQasXYb91SqjmYnyy5mGwt1ibr7DSmmQWSA/640?wx_fmt=png&from=appmsg#imgIndex=10",
+          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(10)",
+          "available": true
+        },
+        {
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJXD5snfggprIKX1n4cH9mm5na9Wkxf7t7zeAu8gF3ciaic3oPP1HmUoeGibHjLaevBlVpKvr1h9JhoLRd0HcSfgOrgecXibQVbpDk8/640?wx_fmt=png&from=appmsg#imgIndex=11",
+          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(11)",
+          "available": true
+        },
+        {
+          "sourceUrl": "https://mmbiz.qpic.cn/sz_mmbiz_png/Q5JJsLWYMJWvkatACDQ06oBFkWIqST12ZHYe1icsf3tuesNJK0FDKKZXDPpcn6nyDWVqadL7kXziaos0WzSch9ZTteCZvjcATic7Uh8ia6V2Cvc/640?wx_fmt=png&from=appmsg#imgIndex=12",
+          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(12)",
+          "available": true
+        },
+        {
+          "sourceUrl": "https://mmbiz.qpic.cn/mmbiz_png/Q5JJsLWYMJX8YjXmljjRVAJplicrgdg4R2DSP4Z8wSibPMiaOcPRIsPxo4X222dqicaxCIAdN8XLHY1ylQQfynSlOCTJrW4nAXF1HHm2cucXndk/640?wx_fmt=png&from=appmsg#imgIndex=13",
+          "localPath": "要宣布翻篇了？那我磁化损失呢，厉娜_files/640(13)",
+          "available": true
+        }
+      ],
+      "backgrounds": []
+    }
+  ]
+}

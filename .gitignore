@@ -1,0 +1,16 @@
+node_modules/
+测试文章/
+dist/
+*.log
+.preview/
+test-artifacts/
+test-results*.txt
+tmp/
+output/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.DS_Store
+Thumbs.db
