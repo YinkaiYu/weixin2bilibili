@@ -16,10 +16,12 @@ const expectations = [
   {file:'为什么只睡20分钟，下午就能精神满满？_ No. 537.html', collection:'问答', images:7, gifs:0, formulas:7, superscripts:19, subscripts:0, backgrounds:0, captions:3},
   {file:'你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html', collection:'正经玩', images:16, gifs:1, formulas:4, superscripts:0, subscripts:7, backgrounds:1, captions:4},
   {file:'摸了半天找不到头，胶带却记得你撕到哪儿？.html', collection:'线上科学日', images:12, gifs:0, formulas:0, superscripts:0, subscripts:4, backgrounds:0, captions:9},
-  {file:'要宣布翻篇了？那我磁化损失呢，厉娜.html', collection:'线上科学日', images:64, gifs:0, formulas:0, superscripts:0, subscripts:0, backgrounds:0, captions:19},
+  {file:'要宣布翻篇了？那我磁化损失呢，厉娜.html', collection:'线上科学日', images:21, gifs:0, formulas:0, superscripts:0, subscripts:0, backgrounds:0, captions:19},
 ];
 const entries = [];
 const compact=text=>text.replace(/[\s\u200B-\u200D\uFEFF]/g,'');
+// Independently reviewed content figures; all other pre-tail assets are title furniture.
+const contentFigureIndices=[14,16,19,23,26,27,30,31,32,35,37,40,43,44,46,49,50,53,57,60,63];
 function assertText(actual,expected,message){
   let index=0;while(index<actual.length&&index<expected.length&&actual[index]===expected[index])index++;
   assert.ok(actual===expected,`${message}; first difference ${index}, lengths ${actual.length}/${expected.length}; actual ${JSON.stringify(actual.slice(Math.max(0,index-20),index+60))}; expected ${JSON.stringify(expected.slice(Math.max(0,index-20),index+60))}`);
@@ -28,8 +30,8 @@ const imageSource=image=>image.getAttribute('data-src')||image.getAttribute('src
 const formulaSources=body=>[...body.querySelectorAll('[data-formula],[data-latex]')].filter(node=>!node.parentElement.closest('[data-formula],[data-latex]')).map(node=>node.getAttribute('data-formula')||node.getAttribute('data-latex'));
 
 // Fixture review fixes the authorized tail boundary independently of cleanArticle.
-// Empty WeChat image shells carry no address; every addressed body image remains
-// part of this source inventory, including the former template ornament assets.
+// Empty WeChat image shells carry no address. The independently reviewed content
+// figure inventory below excludes title furniture, while keeping all source text.
 function sourceBaseline(source,expected){
   const raw=new DOMParser().parseFromString(source,'text/html'),body=raw.querySelector('#js_content');
   const tail=expected.collection==='翻译专栏'?'fu福li利shi时jian间':expected.collection==='问答'?'投票':expected.collection==='正经玩'?'上期回顾':'近期热门文章Top10';
@@ -44,6 +46,7 @@ function sourceBaseline(source,expected){
     while(walker.nextNode())walker.currentNode.textContent=walker.currentNode.textContent.replace(/https?:\/\/[^\s]+/g,url=>{urls.push(url);return '';});
     assert.equal(urls.length,5,'five ordinary DOI URLs are deliberately removed; citation prose remains');
   }
+  if(expected.file.includes('厉娜')) for(const [index,image] of [...retained.querySelectorAll('img')].entries()) if(!contentFigureIndices.includes(index))image.remove();
   return {body:retained,text:compact(retained.textContent),images:[...retained.querySelectorAll('img')].map(imageSource).filter(Boolean),formulas:formulaSources(retained),scripts:[...retained.querySelectorAll('sup,sub')].map(node=>({tag:node.localName,text:node.textContent}))};
 }
 
@@ -139,18 +142,18 @@ for (const expected of expectations) {
       assert.equal(link.textContent,'Sniffing out the link between odor and disease');
     }
     if (expected.file.includes('厉娜')) {
-      assert.deepEqual(parsed.removedDecorativeImages,[]);
-      assert.equal(parsed.stats.removedDecorativeImages,0);
-      assert.equal(baseline.images.length,64);
+      assert.deepEqual(parsed.removedDecorativeImages.map(item=>item.imageIndex).sort((a,b)=>a-b),Array.from({length:64},(_,i)=>i).filter(i=>!contentFigureIndices.includes(i)));
+      assert.equal(parsed.stats.removedDecorativeImages,43);
+      assert.equal(baseline.images.length,21);
       assert.ok([...baseline.body.querySelectorAll('img')].every(image=>!['presentation','none'].includes(image.getAttribute('role'))));
-      assert.deepEqual([...document.images].map(image=>Number(new URL(image.src).hash.match(/imgIndex=(\d+)/)?.[1])),Array.from({length:64},(_,index)=>index),'raw images 0–63 all remain; unmarked assets are not assumed decorative');
+      assert.deepEqual([...document.images].map(image=>Number(new URL(image.src).hash.match(/imgIndex=(\d+)/)?.[1])),contentFigureIndices,'all independently reviewed content figures remain in order');
       for (const text of ['都重新见面了怎么还没和好？','从《后会友期》看物理','外场变了，过去还算数','还买鸭舌呢，外场早变了','“画地为牢”，这个牢为什么出不去','弹幕都在劝，怎么又说回去了','油烟扇走了，旧事还在后台','所以，下一次开口能做什么']) assert.ok(document.body.textContent.includes(text),text);
       for(const index of [46,63]) assert.ok([...document.images].some(img=>img.getAttribute('src').endsWith(`#imgIndex=${index}`)),`content image ${index}`);
       const rawDocument=new DOMParser().parseFromString(fs.readFileSync(filename,'utf8'),'text/html');
       for(const image of rawDocument.querySelectorAll('#js_content img')) if(['34px','58px'].includes(image.parentElement.style.width)) image.style.width='100%';
       const lazyVariant=parseArticle(rawDocument.documentElement.outerHTML);
-      assert.equal(lazyVariant.stats.images,64,'changing lazy image widths cannot change semantic retention');
-      assert.equal(lazyVariant.stats.removedDecorativeImages,0);
+      assert.equal(lazyVariant.stats.images,21,'changing lazy image widths cannot change semantic retention');
+      assert.equal(lazyVariant.stats.removedDecorativeImages,43);
       const lazyDocument=new DOMParser().parseFromString(lazyVariant.html,'text/html');
       assert.deepEqual([...lazyDocument.images].map(image=>image.getAttribute('src')),baseline.images);
     } else assert.equal(parsed.stats.removedDecorativeImages,0);

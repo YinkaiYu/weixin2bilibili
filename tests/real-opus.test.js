@@ -15,9 +15,11 @@ const cases = [
   { name: '为什么只睡20分钟，下午就能精神满满？_ No. 537.html', tail: '投票', raster: 8, images: 15, formulas: 14, captions: 0 },
   { name: '你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html', tail: '上期回顾', raster: 2, images: 17, formulas: 11, captions: 4 },
   { name: '摸了半天找不到头，胶带却记得你撕到哪儿？.html', raster: 0, images: 12, formulas: 4, captions: 9 },
-  { name: '要宣布翻篇了？那我磁化损失呢，厉娜.html', raster: 1, images: 51, formulas: 0, captions: 19 },
+  { name: '要宣布翻篇了？那我磁化损失呢，厉娜.html', raster: 0, images: 21, formulas: 0, captions: 19 },
 ];
 const compact=text=>text.replace(/[\s\u200B-\u200D\uFEFF]/g,'');
+// Independently reviewed content figures; all other pre-tail assets are title furniture.
+const contentFigureIndices=[14,16,19,23,26,27,30,31,32,35,37,40,43,44,46,49,50,53,57,60,63];
 function assertText(actual,expected,message){
   let index=0;while(index<actual.length&&index<expected.length&&actual[index]===expected[index])index++;
   assert.ok(actual===expected,`${message}; first difference ${index}, lengths ${actual.length}/${expected.length}; actual ${JSON.stringify(actual.slice(Math.max(0,index-20),index+60))}; expected ${JSON.stringify(expected.slice(Math.max(0,index-20),index+60))}`);
@@ -42,6 +44,7 @@ function sourceBaseline(html,sample){
     while(walker.nextNode())walker.currentNode.textContent=walker.currentNode.textContent.replace(/https?:\/\/[^\s]+/g,url=>{urls.push(url);return '';});
     assert.equal(urls.length,5);
   }
+  if(sample.name.includes('厉娜')) for(const [index,image] of [...retained.querySelectorAll('img')].entries()) if(!contentFigureIndices.includes(index))image.remove();
   return {body:retained,text:compact(retained.textContent),images:[...retained.querySelectorAll('img')].map(image=>image.getAttribute('data-src')||image.getAttribute('src')||'').filter(Boolean),formulas:formulaSources(retained),scripts:scriptSources(retained)};
 }
 
@@ -77,7 +80,7 @@ for (const sample of cases) {
     }
     if (sample.name.includes('厉娜')) {
       const retained = [...doc.images].map(img => Number(new URL(img.src).hash.match(/imgIndex=(\d+)/)?.[1]));
-      assert.deepEqual(retained,Array.from({length:64},(_,index)=>index),'all 64 unmarked original images remain');
+      assert.deepEqual(retained,contentFigureIndices,'all independently reviewed content figures remain');
       for (const title of ['都重新见面了怎么还没和好？','从《后会友期》看物理','外场变了，过去还算数']) assert.ok(doc.body.textContent.includes(title), '海报文字保留');
       assert.ok(doc.body.textContent.includes('τ ≈ τ₀ · exp(ΔE / kBT)'), 'Unicode 正文公式不因装饰清理被删');
     }
@@ -191,9 +194,8 @@ for (const sample of cases) {
       assert.deepEqual(fallback.content.paragraphs.flatMap(p=>p.pic?.pics||[]),pictures,'链接回退不能改变任何正文图和图注');
     }
     if (sample.name.includes('厉娜')) {
-      assert.equal(captures.length,1);assert.deepEqual(captures[0].images,baseline.images.slice(0,14),'cover raster retains all fourteen original layers');
-      assert.equal(compact(captures[0].text),'都重新见面了怎么还没和好？从《后会友期》看物理外场变了，过去还算数');
-      assert.equal(pictures.length,1+50,'one intact cover composite plus fifty independent source images');
+      assert.equal(captures.length,0,'title furniture must not require a raster');
+      assert.equal(pictures.length,21,'all content images remain independent');
       for (const title of ['还买鸭舌呢，外场早变了','“画地为牢”，这个牢为什么出不去','弹幕都在劝，怎么又说回去了','油烟扇走了，旧事还在后台','所以，下一次开口能做什么']) {
         const word=nativeWords.find(word=>word.words===title);
         assert.ok(word, '标题内容保留可编辑文字');

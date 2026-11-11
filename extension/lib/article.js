@@ -104,7 +104,7 @@ function blend(foreground, background) {
   return foreground.slice(0,3).map((channel,index)=>channel*foreground[3]+background[index]*(1-foreground[3])).concat(1);
 }
 
-function textReadableWithoutImage(element, omittedSolidBackground = null) {
+function textReadableWithoutImage(element, omittedSolidBackground = null, minimumContrast = 3) {
   const walker = element.ownerDocument.createTreeWalker(element,4);
   const samples=[];
   while (walker.nextNode()) {
@@ -131,7 +131,7 @@ function textReadableWithoutImage(element, omittedSolidBackground = null) {
     if (!foreground) return false;
     const ink=luminance(blend(foreground,background)), paper=luminance(background);
     // Be conservative when the image may supply the contrast for the text.
-    if ((Math.max(ink,paper)+0.05)/(Math.min(ink,paper)+0.05)<3) return false;
+    if ((Math.max(ink,paper)+0.05)/(Math.min(ink,paper)+0.05)<minimumContrast) return false;
   }
   return true;
 }
@@ -327,6 +327,66 @@ function gridCell(css) {
   const column=css.gridColumnStart || css.gridColumn.split('/')[0].trim() || parts[1];
   if(!row || !column || ['auto','initial','inherit','unset'].includes(row) || ['auto','initial','inherit','unset'].includes(column)) return '';
   return row+'|'+column;
+}
+
+// Typography-only title furniture: classify the role of a whole component,
+// never a source URL, article phrase, image count, color or template dimension.
+function removeTitleFurniture(body,imageIndices) {
+  const removed=[];
+  const protectedMedia='svg,math,table,figure,figcaption,video,audio,iframe,sup,sub,'+FORMULA_SELECTOR;
+  const contentImage=image=>image.matches(FORMULA_SELECTOR) || image.closest(protectedMedia) ||
+    image.hasAttribute('data-sync-formula-image') || /latex|formula|equation|math/i.test(image.className||'') ||
+    image.getAttribute('type')==='latex' || image.getAttribute('data-type')==='latex' ||
+    ['title','aria-label','data-caption'].some(key=>normalizedText(image.getAttribute(key))) ||
+    !['','图片','image'].includes(normalizedText(image.getAttribute('alt')).toLowerCase());
+  const textOnly=node=>!node.querySelector('img,'+protectedMedia) && normalizedText(node.textContent);
+  const bold=node=>[...node.querySelectorAll('strong,b,h1,h2,h3,h4,h5,h6,[style]')].some(el=>
+    normalizedText(el.textContent) && (el.matches('strong,b,h1,h2,h3,h4,h5,h6') || /^(bold|[6-9]00)$/.test(el.style.fontWeight)));
+  const discard=(image,reason)=>{removed.push({imageIndex:imageIndices.get(image),sourceUrl:image.getAttribute('data-src')||image.getAttribute('src')||'',reason});image.remove();};
+  const flow=node=>{
+    for(const el of [node,...node.querySelectorAll('*')]) for(const property of Array.from(el.style||[]))
+      if(/^(?:display|position|z-index|transform|aspect-ratio|overflow|grid|width|height|min-|max-|margin|padding|flex|align-self)/.test(property))el.style.removeProperty(property);
+  };
+  for(const grid of [...body.querySelectorAll('section,div,header')]) {
+    if(!['grid','inline-grid'].includes(grid.style.display)||containsTemplateMedia(grid,protectedMedia))continue;
+    const children=[...grid.children],images=[...grid.querySelectorAll('img')],texts=children.filter(textOnly);
+    const pictureBranches=children.filter(node=>!normalizedText(node.textContent)&&node.querySelectorAll('img').length===1);
+    if(!images.length||pictureBranches.length!==images.length||!texts.length||images.some(contentImage))continue;
+    if(firstCaptionCandidate(nextCaptionNode(grid,body)))continue;
+    const cells=children.filter(node=>normalizedText(node.textContent)||node.querySelector('img')).map(node=>gridCell(node.style));
+    if(cells.some(cell=>!cell||cell!==cells[0]))continue;
+    // A leading poster, with an independent typographic heading and explicitly
+    // noninteractive image layers. Ordinary collages and annotated figures stay.
+    const before=body.ownerDocument.createRange();before.selectNodeContents(body);before.setEndBefore(grid);
+    const preceding=before.cloneContents();
+    if(normalizedText(preceding.textContent)||containsTemplateMedia(preceding,'img,'+protectedMedia))continue;
+    if(texts.some(node=>normalizedText(node.textContent).length>80)||!texts.some(node=>bold(node)&&[node,...node.querySelectorAll('*')].some(el=>captionTextStyle(el).size>=28)))continue;
+    if(!images.every(image=>{
+      for(let el=image;el&&el!==grid;el=el.parentElement)if(el.style.pointerEvents==='none'&&el.style.lineHeight==='0')return true;
+      return false;
+    })||!textReadableWithoutImage(grid,null,2))continue;
+    for(const image of images)discard(image,'noninteractive-title-poster');
+    for(const branch of pictureBranches)branch.remove();
+    flow(grid);
+  }
+  for(const row of [...body.querySelectorAll('section,div,header')]) {
+    if(!['flex','inline-flex'].includes(row.style.display)||row.style.flexDirection==='column'||row.querySelector(protectedMedia))continue;
+    const children=[...row.children],texts=children.filter(textOnly),images=[...row.querySelectorAll('img')];
+    const slots=children.filter(node=>!normalizedText(node.textContent)&&node.querySelectorAll('img').length===1);
+    if(texts.length!==1||!bold(texts[0])||normalizedText(row.textContent).length>100||slots.length!==images.length||images.some(contentImage))continue;
+    if(firstCaptionCandidate(nextCaptionNode(row,body)))continue;
+    if(images.some(image=>{
+      const width=image.parentElement.style.width.match(/^([\d.]+)px$/);
+      return !width || Number(width[1])<=0 || Number(width[1])>4*captionTextStyle(texts[0]).size;
+    }))continue;
+    const mirrored=slots.length===2&&children[0]===slots[0]&&children.at(-1)===slots[1]&&
+      [...slots[1].querySelectorAll('[style]')].some(el=>/rotateY\(180deg\)|scaleX\(-1\)/i.test(el.style.transform));
+    const chapter=slots.length===1&&[...texts[0].querySelectorAll('p,h1,h2,h3,h4,h5,h6')].some(el=>/^(?:part|chapter|section)\s*\d+$|^第[一二三四五六七八九十百\d]+[章节部分]$/i.test(normalizedText(el.textContent)));
+    if(!mirrored&&!chapter)continue;
+    for(const image of images)discard(image,mirrored?'mirrored-title-frame':'chapter-title-badge');
+    for(const slot of slots)slot.remove();
+  }
+  return removed;
 }
 
 function markCompositeLayouts(body) {
@@ -762,13 +822,13 @@ export function cleanArticle(html, options = {}) {
   stats.removedDecorativeBackgrounds+=gradients.decorative;
   stats.adaptedGradientMarkers=gradients.markers;
   stats.flattenedCharacterHeadings=flattenCharacterCardHeadings(body);
-  const removedDecorativeImages=removeDeclaredDecorativeImages(body,imageIndices);
+  const removedDecorativeImages=[...removeDeclaredDecorativeImages(body,imageIndices),...removeTitleFurniture(body,imageIndices)];
   stats.removedDecorativeImages=removedDecorativeImages.length;
   const cardDecorations=clearTextCardDecorations(body);
   stats.removedAnswerPanelBackgrounds=cardDecorations.panels;
   stats.removedFormulaCardDecorations=cardDecorations.formulas;
   stats.compositeLayouts=markCompositeLayouts(body);
-  if(stats.removedDecorativeImages) warnings.push(`已略去 ${stats.removedDecorativeImages} 张明确标记为装饰的图片，保留标题和正文配图。`);
+  if(stats.removedDecorativeImages) warnings.push(`已略去 ${stats.removedDecorativeImages} 张装饰图片，保留标题和正文配图。`);
   if(stats.flattenedCharacterHeadings) warnings.push('已将横排单字卡片整理为一行文字，保留文字与拼音。');
   if(stats.removedAnswerPanelBackgrounds) warnings.push(`已略去 ${stats.removedAnswerPanelBackgrounds} 处正文卡片的装饰底色和边框，保留正文、公式和文字高亮。`);
   if(stats.removedFormulaCardDecorations) warnings.push('已略去公式卡片的装饰底色和边框，保留公式文字、颜色和上下标。');

@@ -23,6 +23,13 @@ document.querySelector('#run').onclick=async()=>{
       results.push(`通过：不同文案、配色与字号 ${title}`);
     }
     const blue=solidImage('#1144cc'), red=solidImage('#dd2244');
+    const furniture=cleanArticle(`<header style="display:grid;grid-template-columns:100%"><section style="grid-area:1/1"><div style="pointer-events:none;line-height:0"><img src="${blue}" alt="图片"></div></section><section style="grid-area:1/1;color:#914532;font-size:35px"><strong>新的主题标题</strong></section></header><section style="display:flex"><div><div style="width:40px"><img src="${red}" alt="图片"></div></div><div style="font-size:20px"><strong>新的小标题</strong></div><div><div style="transform:scaleX(-1);width:40px"><img src="${red}" alt="图片"></div></div></section><p>正文配图保留</p><figure><img src="${blue}" alt="数据图"><figcaption>实验数据</figcaption></figure>`);
+    assert(furniture.stats.removedDecorativeImages===3,'只清理标题的非交互拼贴和镜像边饰');
+    const furnitureNative=await prepareForNative(furniture.html);
+    assert(furnitureNative.rasterized===0,'标题装饰清理后不应转图');
+    assert(parse(furnitureNative.html).images.length===1,'正文配图不能被删');
+    assert(parse(furnitureNative.html).body.textContent==='新的主题标题新的小标题正文配图保留实验数据','标题、正文与图注必须完整');
+    results.push('通过：标题装饰清理、文字可编辑与正文配图保留');
     const overlay=`<section style="display:grid;grid-template-columns:100%;grid-template-rows:100%;width:240px;height:120px"><div style="grid-column-start:1;grid-row-start:1"><img src="${blue}" style="display:block;width:240px;height:120px"></div><div style="grid-column-start:1;grid-row-start:1;width:60px;height:60px;margin:20px 0 0 30px"><img src="${red}" style="display:block;width:60px;height:60px"></div><div style="grid-column-start:1;grid-row-start:1;align-self:end;color:white;font-weight:bold">保留全部叠层内容</div></section>`;
     const cleaned=cleanArticle(overlay);
     assert(parse(cleaned.html).images.length===2,'未经确认的图片必须保留');
