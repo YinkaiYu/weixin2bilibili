@@ -9,6 +9,11 @@ const files=[];async function walk(dir){for(const e of await readdir(dir,{withFi
 for(const file of files){const r=spawnSync(process.execPath,['--check',file],{encoding:'utf8'});if(r.status)throw new Error(file+': '+r.stderr);}
 for(const script of manifest.content_scripts.flatMap(c=>c.js))await readFile(path.join('extension',script));
 await readFile(path.join('extension',manifest.background.service_worker));
+const iconEntries=[...Object.entries(manifest.icons || {}),...Object.entries(manifest.action?.default_icon || {})];
+for(const [size,file]of iconEntries){
+  const icon=await readFile(path.join('extension',file));
+  if(icon.length<24 || icon.subarray(0,8).toString('hex')!=='89504e470d0a1a0a' || icon.readUInt32BE(16)!==Number(size) || icon.readUInt32BE(20)!==Number(size))throw new Error(`Invalid ${size}px PNG icon: ${file}`);
+}
 const client=await readFile('extension/lib/bilibili.js','utf8');
 if(/https:\/\/[^'"\s]+\/(?:publish|submit)/.test(client))throw new Error('Unexpected publish endpoint');
-console.log(`Manifest, ${files.length} JavaScript files, local assets and draft-only boundary checked.`);
+console.log(`Manifest, ${files.length} JavaScript files, ${new Set(iconEntries.map(([,file])=>file)).size} icons, local assets and draft-only boundary checked.`);

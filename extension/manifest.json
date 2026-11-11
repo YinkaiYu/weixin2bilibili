@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
-  "name": "微文同步 · B站专栏",
-  "version": "0.1.1",
+  "name": "物理所B站导入微信文章",
+  "version": "0.1.2",
   "description": "将微信公众号文章整理成可编辑的B站专栏草稿，转存图片并检查格式。不会自动发布。",
   "minimum_chrome_version": "120",
   "permissions": ["storage", "activeTab", "scripting", "cookies", "declarativeNetRequestWithHostAccess"],
@@ -10,7 +10,11 @@
     "https://api.bilibili.com/*", "https://member.bilibili.com/*", "https://www.bilibili.com/*",
     "https://*.hdslb.com/*", "https://*.biliimg.com/*"
   ],
-  "action": { "default_title": "导入微信公众号文章" },
+  "icons": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" },
+  "action": {
+    "default_title": "物理所B站导入微信文章",
+    "default_icon": { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" }
+  },
   "background": { "service_worker": "background.js", "type": "module" },
   "content_scripts": [{"matches":["https://member.bilibili.com/*"],"js":["vendor/html2canvas.min.js","native-ui.js"],"run_at":"document_idle"}],
   "web_accessible_resources": [{"resources":["lib/*.js"],"matches":["https://member.bilibili.com/*"]}],
