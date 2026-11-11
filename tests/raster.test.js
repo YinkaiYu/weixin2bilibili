@@ -16,9 +16,64 @@ test('merges overlapping targets and includes tables and genuine unknown graphic
   assert.deepEqual(findRasterTargets(doc).map(n=>n.id),['background','graphic','table']);
 });
 
+test('preserves unknown overlapping image compositions as one local block regardless of copy and asset URLs',()=>{
+  for(const [label,count] of [['新的科研主题',2],['Another composition',4]]) {
+    const doc=parse(`<section><div id="composition" data-sync-composite-layout="grid-overlay" style="display:grid">${Array.from({length:count},(_,i)=>`<div><img src="https://mmbiz.qpic.cn/unseen-${i}.png"></div>`).join('')}<div>${label}</div></div><p id="body">Independent body</p><p><img src="https://mmbiz.qpic.cn/body.gif"></p></section>`);
+    const targets=findRasterTargets(doc);
+    assert.deepEqual(targets.map(node=>node.id),['composition']);
+    assert.equal(targets[0].querySelectorAll('img').length,count);
+    assert.equal(targets[0].textContent,label);
+    assert.equal(targets[0].contains(doc.getElementById('body')),false);
+  }
+});
+
+test('overlapping compositions with animated images are never flattened',async()=>{
+  const source='<section data-sync-composite-layout="grid-overlay" style="display:grid"><div><img src="https://mmbiz.qpic.cn/unseen.gif"></div><div>图中文字</div></section>';
+  let renders=0;
+  const result=await prepareForNative(source,{downloadImageImpl:async()=>({mime:'image/gif',animated:true,frames:3,width:90,height:90}),renderImpl:async()=>{renders++;}});
+  assert.equal(renders,0);
+  assert.equal(result.html,source);
+  assert.match(result.blockingIssues.join(' '),/动图/);
+});
+
 test('inline backgrounds select their complete text paragraph to avoid invalid nested paragraphs',()=>{
   const doc=parse('<p id="whole">前<span data-sync-background-url="x">纹理文字</span>后</p><p>下一段保持原生</p>');
   assert.deepEqual(findRasterTargets(doc).map(node=>node.id),['whole']);
+});
+
+test('includes supported gradient layouts and keeps unsupported children from being silently rasterized',async()=>{
+  const doc=parse('<p id="gradient">前<span data-sync-gradient="true" style="background-image:linear-gradient(red,blue)">彩色文字</span>后</p><p>其他段落</p>');
+  assert.deepEqual(findRasterTargets(doc).map(node=>node.id),['gradient']);
+  let calls=0;
+  const html='<section data-sync-composite-layout="grid-overlay"><p data-sync-unsupported="CSS 渐变背景" style="background-image:conic-gradient(red,blue)">内容</p></section>';
+  const result=await prepareForNative(html,{renderImpl:async()=>{calls++;}});
+  assert.equal(calls,0);
+  assert.equal(result.html,html);
+  assert.match(result.blockingIssues.join(' '),/CSS 渐变背景/);
+});
+
+test('uses the shared contrast plan for full-height inline backgrounds but keeps independent headings native',()=>{
+  const doc=parse('<h2 id="heading" style="color:white;background:#173f8a">没有出现在样稿中的标题</h2><p id="inline">前文<span style="color:white;background:#005577">重点文字</span>后文</p><p id="normal">普通正文</p>');
+  assert.deepEqual(findRasterTargets(doc).map(node=>node.id),['inline']);
+});
+
+test('captures only the formula paragraph that needs a full background, not its entire article card',()=>{
+  const doc=parse('<section id="card" style="background:#e5e7eb"><p>前一段</p><p id="formula">E=mc<sup>2</sup></p><p><img src="graph.png"></p><p>后一段</p></section>');
+  assert.deepEqual(findRasterTargets(doc).map(node=>node.id),['formula']);
+});
+
+test('a block-level formula is its own target and does not absorb neighboring animated images',()=>{
+  const doc=parse('<section id="card" style="background:#ddeeff"><p>前文</p><section id="formula" data-formula="x^2"><svg viewBox="0 0 30 20"><text>x²</text></svg></section><p><img src="animation.gif" style="display:block"></p><p>后文</p></section>');
+  assert.deepEqual(findRasterTargets(doc).map(node=>node.id),['formula']);
+});
+
+test('does not rasterize an empty formula source into a blank image',async()=>{
+  const source='<section style="background:#e5e7eb"><p><span data-formula="x^2"></span></p></section>';
+  let calls=0;
+  const result=await prepareForNative(source,{renderImpl:async()=>{calls++;}});
+  assert.equal(calls,0);
+  assert.equal(result.html,source);
+  assert.match(result.blockingIssues.join(' '),/公式只有源码/);
 });
 
 test('root-level inline text and images are also detected',()=>{

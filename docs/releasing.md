@@ -11,13 +11,13 @@
 - `CHANGELOG.md`：新增 `## 版本号` 条目，以用户可见的变化描述本次更新。
 - 功能或操作方式变化时，同步 README 和安装包内的 `extension/使用说明.md`。
 
-以 `0.1.9` 为例：
+以 `0.1.10` 为例：
 
 ```sh
 npm ci
 npm test
 npm run check
-npm run package -- --tag v0.1.9
+npm run package -- --tag v0.1.10
 ```
 
 标签必须与三个版本文件一致。打包程序按固定顺序和时间戳创建 ZIP，再逐文件验证解压内容；包内根目录直接包含 `manifest.json`。
@@ -25,8 +25,8 @@ npm run package -- --tag v0.1.9
 生成的安装文件：
 
 ```text
-dist/weixin2bilibili-v0.1.9.zip
-dist/weixin2bilibili-v0.1.9.zip.sha256
+dist/weixin2bilibili-v0.1.10.zip
+dist/weixin2bilibili-v0.1.10.zip.sha256
 ```
 
 将 ZIP 解压到临时目录，在 Edge 加载该目录，检查导入入口及本次变更涉及的行为。`dist/` 留在本地，安装文件由发布工作流上传。
@@ -36,9 +36,9 @@ dist/weixin2bilibili-v0.1.9.zip.sha256
 提交版本文件，确认工作区干净，然后创建带说明的标签：
 
 ```sh
-git tag -a v0.1.9 -m "Release v0.1.9"
+git tag -a v0.1.10 -m "Release v0.1.10"
 git push origin main
-git push origin v0.1.9
+git push origin v0.1.10
 ```
 
 只推送本次发布的标签。首次发布前，将 `origin` 设置为 `https://github.com/YinkaiYu/weixin2bilibili.git`，并确认仓库允许运行 GitHub Actions。
@@ -51,4 +51,4 @@ git push origin v0.1.9
 
 [`ci.yml`](../.github/workflows/ci.yml) 在 `main` 提交和 Pull Request 中运行，覆盖 Windows 与 Linux。普通提交只执行检查和打包；发布由版本标签触发。
 
-安装包仅包含 `extension/`，不包含测试资料、开发文档、账号信息或依赖目录。机构标志与第三方代码的说明随扩展一并分发。
+安装包仅包含 `extension/`，不包含测试资料、开发文档、账号信息或依赖目录。图标来源与第三方代码许可的说明随扩展一并分发。

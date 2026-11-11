@@ -1,5 +1,6 @@
 /** Loss-aware, local-only rendering for the few blocks Bilibili cannot represent. */
 import {downloadImage} from './media.js';
+import {analyzeNativeTextBackgrounds,getCompositePageBackground} from './opus.js';
 
 const BLOCK = new Set('P DIV SECTION ARTICLE MAIN HEADER FOOTER H1 H2 H3 H4 H5 H6 BLOCKQUOTE FIGURE FIGCAPTION UL OL LI PRE HR'.split(' '));
 const WIDTH = 680;
@@ -66,9 +67,13 @@ function includeVerticalOverflow(wrapper) {
 export function findRasterTargets(input) {
   const body = input.body || input;
   const candidates = new Set();
-  for (const element of body.querySelectorAll('[data-sync-background-url],svg,math,table,img')) {
+  for (const element of body.querySelectorAll('[data-sync-composite-layout],[data-sync-gradient],[data-sync-background-url],svg,math,table,img')) {
     const tag = element.tagName.toUpperCase();
-    if (element.hasAttribute('data-sync-background-url')) {
+    if (element.getAttribute('data-sync-composite-layout') === 'grid-overlay') {
+      candidates.add(element);
+      continue;
+    }
+    if (element.hasAttribute('data-sync-background-url') || element.getAttribute('data-sync-gradient')==='true') {
       const paragraph = nearestBlock(element,body);
       candidates.add(decoratedHeadingTarget(element,body) || (!BLOCK.has(tag) && isLeafTextBlock(paragraph) ? paragraph : element));
       continue;
@@ -85,6 +90,10 @@ export function findRasterTargets(input) {
       const paragraph = nearestBlock(element, body);
       if (isLeafTextBlock(paragraph)) candidates.add(paragraph);
     }
+  }
+  for (const {element,backgroundElement,reason} of analyzeNativeTextBackgrounds(body).unsupported) {
+    if (!backgroundElement) continue;
+    candidates.add(reason==='formula-background' ? BLOCK.has(element.tagName) ? element : nearestBlock(element,body) : BLOCK.has(backgroundElement.tagName) ? backgroundElement : nearestBlock(backgroundElement,body));
   }
   // A background or table can contain another candidate. Capture it only once.
   return [body,...body.querySelectorAll('*')].filter(element => candidates.has(element) && ![...candidates].some(other => other !== element && other.contains(element)));
@@ -105,7 +114,9 @@ function copyInheritedStyle(source, boundary, wrapper) {
   wrapper.style.fontSize = '17px';
   wrapper.style.lineHeight = '1.8';
   wrapper.style.color = '#222222';
-  wrapper.style.backgroundColor = '#ffffff';
+  const background=getCompositePageBackground(source);
+  if(!background)throw new Error('局部的祖先背景或透明度无法完整合成，请调整该局部后重试。');
+  wrapper.style.backgroundColor = background;
   for (const ancestor of ancestors) {
     if (['B','STRONG'].includes(ancestor.tagName)) wrapper.style.fontWeight = 'bold';
     if (['I','EM'].includes(ancestor.tagName)) wrapper.style.fontStyle = 'italic';
@@ -113,14 +124,53 @@ function copyInheritedStyle(source, boundary, wrapper) {
       const value = ancestor.style?.getPropertyValue(property);
       if (value && value !== 'inherit') wrapper.style.setProperty(property, value);
     }
-    const background = ancestor.style?.backgroundColor;
-    if (background && background !== 'transparent' && background !== 'rgba(0, 0, 0, 0)') wrapper.style.backgroundColor = background;
+  }
+}
+
+// Preserve the browser's grid layout before passing it to html2canvas, whose
+// painter does not implement CSS Grid stacking. All coordinates come from the
+// loaded local clone; no dimensions or asset identities are template-specific.
+function freezeGridLayouts(wrapper, owner) {
+  const transformed=[];
+  for(const element of wrapper.querySelectorAll('*')) {
+    const transform=owner.defaultView.getComputedStyle(element).transform;
+    if(!transform||transform==='none')continue;
+    if(!/^matrix\((?:[-+\d.e]+\s*,\s*){5}[-+\d.e]+\)$/i.test(transform))throw new Error('局部含暂不支持的三维变换，已保留原文并停止转换。');
+    transformed.push({element,value:element.style.getPropertyValue('transform'),priority:element.style.getPropertyPriority('transform')});
+  }
+  // Transform bounding boxes include rotation/scale. Measure the unchanged
+  // layout with transforms temporarily off, then restore them exactly once.
+  for(const {element} of transformed)element.style.setProperty('transform','none','important');
+  const grids=[...wrapper.querySelectorAll('*')].filter(node=>['grid','inline-grid'].includes(owner.defaultView.getComputedStyle(node).display));
+  const snapshots=grids.map(grid=>{
+    const rect=grid.getBoundingClientRect(), css=owner.defaultView.getComputedStyle(grid);
+    const borderLeft=parseFloat(css.borderLeftWidth)||0, borderTop=parseFloat(css.borderTopWidth)||0;
+    const children=[...grid.children].map(child=>({child,rect:child.getBoundingClientRect()}));
+    return {grid,rect,borderLeft,borderTop,children};
+  });
+  for(const {grid,rect,borderLeft,borderTop,children} of snapshots.reverse()) {
+    grid.style.display='block';grid.style.position='relative';grid.style.boxSizing='border-box';
+    grid.style.width=`${rect.width}px`;grid.style.height=`${rect.height}px`;
+    for(const {child,rect:childRect} of children) {
+      child.style.position='absolute';child.style.boxSizing='border-box';child.style.margin='0';
+      child.style.left=`${childRect.left-rect.left-borderLeft}px`;
+      child.style.top=`${childRect.top-rect.top-borderTop}px`;
+      child.style.width=`${childRect.width}px`;child.style.height=`${childRect.height}px`;
+    }
+  }
+  for(const {element,value,priority} of transformed) {
+    if(value)element.style.setProperty('transform',value,priority);else element.style.removeProperty('transform');
   }
 }
 
 function assertSafeTree(target) {
   if (target.matches?.('script,iframe,object,embed,link,style,base,form') || target.querySelector('script,iframe,object,embed,link,style,base,form')) throw new Error('局部包含未清理的嵌入内容，已停止转换。');
+  const unsupported=allIncluding(target,'[data-sync-unsupported]');
+  if (unsupported.length) throw new Error(`局部含暂不支持的 ${unsupported[0].getAttribute('data-sync-unsupported')}，已保留原内容并停止转换。`);
   if (target.querySelector('animate,animateTransform,animateMotion,set')) throw new Error('局部包含 SVG 动画，不能转成静态图片。');
+  for (const formula of allIncluding(target,'[data-formula],[data-latex]')) {
+    if (!formula.textContent.trim() && !formula.querySelector('svg,math,img') && formula.tagName!=='IMG') throw new Error('公式只有源码、没有可供截图的显示内容；请保留原生公式或补充公式显示后再导入。');
+  }
   for (const element of [target,...target.querySelectorAll('*')]) {
     for (const attribute of element.attributes) {
       if (/^on/i.test(attribute.name) || /javascript:|expression\s*\(/i.test(attribute.value)) throw new Error('局部包含未清理的可执行属性，已停止转换。');
@@ -224,7 +274,7 @@ export async function prepareForNative(html, {
   for (let index=0; index<targets.length; index++) {
     const source = targets[index];
     let wrapper;
-    const reason = source.matches('[data-sync-background-url]') || source.querySelector('[data-sync-background-url]') ? '背景排版' : source.querySelector('img') ? '行内图文' : '复杂图形';
+    const reason = source.matches('[data-sync-composite-layout]') ? '叠层图文' : source.matches('[data-sync-background-url]') || source.querySelector('[data-sync-background-url]') ? '背景排版' : source.querySelector('img') ? '行内图文' : '文字底色或复杂图形';
     onProgress({index,total:targets.length,state:'rendering',reason});
     try {
       assertSafeTree(source);
@@ -276,6 +326,7 @@ export async function prepareForNative(html, {
       }
       if (owner.fonts?.ready) await owner.fonts.ready;
       await replaceGraphics(wrapper,owner);
+      freezeGridLayouts(wrapper,owner);
       includeVerticalOverflow(wrapper);
       const rect = wrapper.getBoundingClientRect();
       const height = Math.ceil(Math.max(rect.height,wrapper.scrollHeight));

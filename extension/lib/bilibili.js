@@ -42,9 +42,8 @@ export function matchCollection(names, collections) {
   const normalized = new Set((names || []).map(value => String(value).trim()).filter(Boolean));
   const matches = (collections || []).filter(item => normalized.has(String(item.name).trim()));
   if (matches.length) return matches.length === 1 ? matches[0] : null;
-  // The user's native collection selector was checked on 2026-11-11: the
-  // WeChat album 问答 corresponds to the Bilibili collection 问答Q&A. This is
-  // one explicit alias, not a substring/fuzzy match for unrelated collections.
+  // Institution-specific collection alias, documented in README. Exact names
+  // take priority; this mapping does not inspect article copy or asset URLs.
   const aliases = normalized.has('问答') ? new Set(['问答Q&A']) : new Set();
   const aliasMatches = (collections || []).filter(item => aliases.has(String(item.name).trim()));
   return aliasMatches.length === 1 ? aliasMatches[0] : null;

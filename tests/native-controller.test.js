@@ -12,7 +12,7 @@ const uploadedImage='https://i0.hdslb.com/bfs/new_dyn/transferred.png';
 const validPng=Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX6kAAAAASUVORK5CYII=','base64'));
 const articleHtml=({extraImage='',title='原生导入测试',collectionName='正经玩'}={})=>`<!doctype html><html><head><script>var msg_cdn_url="${originalImage}";${collectionName===null?'':`var album_name=${JSON.stringify(collectionName)};`}</script></head><body><h1 id="activity-name">${title}</h1><div id="js_content"><p><strong>加粗文字</strong><span style="color:#e00000">彩色文字</span> H<sub>2</sub>O</p><p><img data-src="${originalImage}" src="${originalImage}"></p>${extraImage?`<p><img src="${extraImage}"></p>`:''}<h2>往期回顾</h2><p>不应同步这段内容</p></div></body></html>`;
 
-function setup({collections=[{id:42,name:'正经玩',total:1},{id:84,name:'其他栏目',total:2}],sourceHtml=articleHtml()}={}){
+function setup({collections=[{id:42,name:'正经玩',total:1},{id:84,name:'其他栏目',total:2}],sourceHtml=articleHtml(),media=[]}={}){
   const previous={chrome:globalThis.chrome,document:globalThis.document,DOMParser:globalThis.DOMParser,createImageBitmap:globalThis.createImageBitmap};
   const dom=new JSDOM('<!doctype html><html><body></body></html>',{url:'https://member.bilibili.com/york/read-editor'});
   globalThis.document=dom.window.document;globalThis.DOMParser=dom.window.DOMParser;
@@ -27,6 +27,8 @@ function setup({collections=[{id:42,name:'正经玩',total:1},{id:84,name:'其�
   const json=data=>new Response(JSON.stringify({code:0,data}),{headers:{'Content-Type':'application/json'}});
   const fetchImpl=async(url,init={})=>{
     apiCalls.push({url,init});
+    const sourceMedia=media.find(item=>item.sourceUrl===url);
+    if(sourceMedia)return new Response(sourceMedia.bytes,{headers:{'Content-Type':'image/png'}});
     if(url===originalImage)return new Response(validPng,{headers:{'Content-Type':'image/png'}});
     if(url==='https://mmbiz.qpic.cn/example/broken.png')return new Response('not found',{status:404});
     if(url.endsWith('/x/web-interface/nav'))return json({isLogin:true,mid:8080,uname:'测试账号',face:''});
@@ -39,6 +41,11 @@ function setup({collections=[{id:42,name:'正经玩',total:1},{id:84,name:'其�
     if(url.endsWith('/x/dynamic/feed/draw/upload_bfs')){
       if(switches.failUpload)return new Response(JSON.stringify({code:-400,message:'模拟图片上传失败'}));
       const file=init.body.get('file_up');uploads.push(new Uint8Array(await file.arrayBuffer()));
+      if(media.length){
+        const uploadedMedia=media.find(item=>Buffer.from(item.bytes).equals(Buffer.from(uploads.at(-1))));
+        assert.ok(uploadedMedia,'upload must contain one of the independent source PNGs');
+        return json(uploadedMedia.response);
+      }
       return json({image_url:uploadedImage,image_width:1,image_height:1,image_size:validPng.length/1024});
     }
     if(url.includes('/x/dynamic/feed/article/draft/add?')){
@@ -86,6 +93,33 @@ test('native import uses real parsing/conversion, uploads PNG once for body and 
     assert.ok(!JSON.stringify(arg).includes('不应同步这段内容'));
     assert.ok(progress.length>2&&progress.every(p=>typeof p==='string'));
     assert.equal(app.pending().length,0,'completed job is cleared');
+  }finally{app.close();}
+});
+
+test('saved pictures use actual upload metadata in source order, including repeats, without preflight placeholders',async()=>{
+  // Two complete PNGs with different pixels and dimensions. Expected metadata
+  // comes from the simulated upload responses, never from the converted output.
+  const secondSource='https://mmbiz.qpic.cn/example/second-image.png';
+  const first={url:'https://i0.hdslb.com/bfs/new_dyn/uploaded-orange.png',width:13,height:7,size:12.75};
+  const second={url:'https://i0.hdslb.com/bfs/new_dyn/uploaded-blue.png',width:7,height:11,size:23.125};
+  const media=[
+    {sourceUrl:originalImage,bytes:Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAA0AAAAHCAIAAABcElBNAAAAFUlEQVR4nGP8WqHBQARgIkbRMFIHAMFqAaNlnEefAAAAAElFTkSuQmCC','base64')),response:{image_url:first.url,image_width:13,image_height:7,image_size:12.75}},
+    {sourceUrl:secondSource,bytes:Uint8Array.from(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAcAAAALCAIAAAA88gD/AAAAFElEQVR4nGOUjLrEgAGYMIWGjSgAO14BW6FerdsAAAAASUVORK5CYII=','base64')),response:{image_url:second.url,image_width:7,image_height:11,image_size:23.125}},
+  ];
+  const sourceHtml=articleHtml({extraImage:secondSource})
+    .replace(`<img src="${secondSource}">`,`<img src="${secondSource}" data-w="999" data-h="777">`)
+    .replace('<h2>往期回顾</h2>',`<p><img src="${originalImage}"></p><h2>往期回顾</h2>`);
+  const app=setup({sourceHtml,media});try{
+    const result=await runImport({sourceUrl});
+    assert.equal(result.verified,true);
+    assert.equal(app.savedPayloads.length,1);
+    const arg=app.savedPayloads[0].arg;
+    const pictures=arg.opus.content.paragraphs.flatMap(paragraph=>paragraph.pic?.pics||[]);
+    assert.deepEqual(pictures.map(({url,width,height,size})=>({url,width,height,size})),[first,second,first]);
+    assert.deepEqual(arg.image_urls,[first.url],'cover also uses its actual uploaded URL');
+    assert.deepEqual(app.uploads,media.map(item=>item.bytes),'repeated body image and cover reuse the same upload without re-encoding');
+    assert.doesNotMatch(JSON.stringify(arg),/preflight-|mmbiz\.qpic\.cn/);
+    assert.ok(pictures.every(picture=>picture.width!==640&&picture.height!==480&&picture.size!==1),'preflight defaults must never reach save');
   }finally{app.close();}
 });
 

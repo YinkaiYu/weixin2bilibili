@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { toOpus, explicitLatex, nativeImageUrl } from '../extension/lib/opus.js';
+import { toOpus, explicitLatex, nativeImageUrl, analyzeNativeTextBackgrounds, getCompositePageBackground } from '../extension/lib/opus.js';
 
 const document = new JSDOM('').window.document;
 const image = 'https://i0.hdslb.com/bfs/new_dyn/picture.gif';
@@ -10,19 +10,90 @@ const convert = html => toOpus(html, { document, images });
 const words = result => result.content.paragraphs.flatMap(p => p.text?.nodes || []).filter(n => n.node_type === 1).map(n => n.word);
 const formulas = result => result.content.paragraphs.flatMap(p => p.text?.nodes || []).filter(n => n.node_type === 5).map(n => n.formula.latex_content);
 
-test('adapts only the five user-approved white-on-brown labels into editable brown bold text', () => {
-  const titles=['还买鸭舌呢，外场早变了','“画地为牢”，这个牢为什么出不去','弹幕都在劝，怎么又说回去了','油烟扇走了，旧事还在后台','所以，下一次开口能做什么'];
-  const card=(text,bg='#ae430e',fg='#ffffff')=>`<section style="display:inline-block;background-color:${bg};padding:3px 18px"><p style="font-size:18px;color:${fg}"><strong>${text}</strong></p></section>`;
-  const r=convert('<section style="background:#fffbf2">'+titles.map(title=>card(title)).join('')+'</section>');
-  assert.deepEqual(r.blockingIssues,[]);
-  assert.deepEqual(words(r).map(word=>word.words),titles);
-  for(const word of words(r)) {assert.equal(word.color,'#ae430e');assert.equal(word.style.bold,true);assert.equal(word.font_size,17);assert.equal(word.bg_style,undefined);}
-  assert.deepEqual(r.notices,[{severity:'info',message:'已将白字棕底装饰标题改为棕色加粗文字，保持原生可编辑。'}]);
-  for(const html of [card('其它标题'),card(titles[0],'#123456'),card(titles[0],'#ae430e','#ffcc00')]) {
-    const other=convert(html);
-    assert.equal(other.notices.length,0,'unknown titles and palettes must not be adapted');
-    assert.ok(words(other)[0].bg_style);
+test('composites ancestor alpha backgrounds onto white without including the local block paint', () => {
+  const doc=new document.defaultView.DOMParser().parseFromString('<section style="background:rgba(0,0,255,.5)"><div style="background:rgba(255,0,0,.5)"><p id="target" style="background:#00ff00">内容</p></div></section>','text/html');
+  assert.equal(getCompositePageBackground(doc.getElementById('target')),'#bf4080');
+  assert.equal(getCompositePageBackground(doc.body),'#ffffff');
+});
+
+test('does not guess ancestor backgrounds containing unknown colors, images or opacity', () => {
+  for(const style of ['background:var(--unknown)','background-image:url(https://example.org/background.png)','background-image:linear-gradient(#000,#fff)','background:#123456;opacity:.5']) {
+    const doc=new document.defaultView.DOMParser().parseFromString(`<section style="${style}"><p id="target">内容</p></section>`,'text/html');
+    assert.equal(getCompositePageBackground(doc.getElementById('target')),null,style);
   }
+});
+
+test('adapts independent light-on-dark headings by structure and contrast across wording, palettes and dimensions', () => {
+  const cases=[
+    {html:'<h2 style="background:#123456;color:white;padding:1em">A new research direction</h2>',text:'A new research direction',color:'#123456'},
+    {html:'<div style="text-align:center"><span style="display:inline-flex;background:rgb(24,80,64);padding:7px 29px"><strong style="font-size:19px;color:#edf8ed">关于未来的开放问题？</strong></span></div>',text:'关于未来的开放问题？',color:'#185040'},
+    {html:'<section style="background:#fdf4df"><div><section style="display:inline-block;background:#652b70;width:87%;padding:19px 4px;border-radius:22px"><p style="font-size:26px;color:#fff5fc"><b>Measuring the invisible</b></p></section></div></section>',text:'Measuring the invisible',color:'#652b70'},
+    {html:'<div style="width:fit-content;background:hsl(210,60%,25%);color:#fff"><h3><em>第二章：新的结果</em></h3></div>',text:'第二章：新的结果',color:'#1a4066'},
+  ];
+  for(const example of cases) {
+    const result=convert(example.html),converted=words(result);
+    assert.deepEqual(result.blockingIssues,[],example.text);
+    assert.equal(converted.map(word=>word.words).join(''),example.text);
+    for(const word of converted){assert.equal(word.color,example.color);assert.equal(word.style.bold,true);assert.equal(word.bg_style,undefined);}
+    assert.deepEqual(result.notices,[{severity:'info',message:'已将浅色字配深色底的独立标题改为背景色加粗文字，保持原生可编辑。'}]);
+  }
+});
+
+test('does not recolor ordinary paragraphs, inline highlights, multiblock cards or rich media as headings', () => {
+  const cases=[
+    '<p style="background:#123456;color:white;font-weight:bold">这是一段正文，不是独立标题标签。</p>',
+    '<p>正文中的<span style="display:inline-block;background:#123456;color:white;font-weight:bold">强调词</span>仍属于原句。</p>',
+    '正文中的<span style="display:inline-block;background:#123456;color:white;font-weight:bold">强调词</span>仍属于原句。',
+    `<img src="${image}"><span style="display:inline-block;background:#123456;color:white;font-weight:bold">配图标签</span>`,
+    `<span style="display:inline-block;background:#123456;color:white;font-weight:bold">配图标签</span><img src="${image}">`,
+    '<section style="display:inline-block;background:#123456;color:white"><p><b>开头</b></p><p><b>说明文字</b></p></section>',
+    `<h2 style="background:#123456;color:white">实验图<img style="display:block" src="${image}"></h2>`,
+    '<h2 style="background:#123456;color:white">关系式 <span data-formula="x^2"></span></h2>',
+    '<section style="display:inline-block;background:#123456;color:white;font-weight:bold">'+ '这段内容需要完整保留，'.repeat(30)+'</section>',
+  ];
+  for(const html of cases){const result=convert(html);assert.ok(result.blockingIssues.length);assert.equal(result.notices.length,0);assert.ok(words(result).some(word=>word.color==='#ffffff'));}
+  const readable=convert('<p style="background:#eee;color:#222">普通正文</p><p><mark>黄色高亮</mark></p>');
+  assert.deepEqual(readable.blockingIssues,[]);assert.equal(readable.notices.length,0);
+  assert.equal(words(readable)[0].color,'#222222');assert.equal(words(readable)[0].bg_style.color.color,'#eeeeee');
+  assert.equal(words(readable)[1].bg_style.color.color,'#ffff00');
+});
+
+test('requires solid uniform colors and readable original and destination contrast before adapting a heading', () => {
+  for(const html of [
+    '<h2 style="background:#ddd;color:white">原始对比不足</h2>',
+    '<section style="background:#111"><h2 style="background:#123456;color:white">转成深色后无法衬底</h2></section>',
+    '<h2 style="background:rgba(18,52,86,.7);color:white">半透明底</h2>',
+    '<h2 style="background:linear-gradient(#123456,#325678);color:white">渐变底</h2>',
+    '<h2 style="background:#123456;color:white">不同颜色<span style="color:#fff0ab">各有含义</span></h2>',
+    '<h2 style="background:#123456;color:white">局部高亮<span style="background:#631a50">不能清除</span></h2>',
+    '<h2 style="background:#123456;color:white;opacity:.6">透明标题</h2>',
+  ]){const result=convert(html);assert.equal(result.notices.length,0);assert.ok(result.blockingIssues.some(message=>message.includes('完整背景')));}
+});
+
+test('background analysis is read-only and exposes exact background owners for the renderer', () => {
+  const doc=new document.defaultView.DOMParser().parseFromString('<h2 style="background:#124065;color:white">可编辑标题</h2><section id="card" style="background:#124065"><p><span id="ink" style="color:white">正文保持原样</span></p></section>','text/html');
+  const before=doc.body.innerHTML,plan=analyzeNativeTextBackgrounds(doc);
+  assert.equal(doc.body.innerHTML,before);
+  assert.equal(plan.headings.length,1);assert.equal(plan.headings[0].element,doc.querySelector('h2'));assert.equal(plan.headings[0].color,'#124065');
+  assert.equal(plan.unsupported.length,1);assert.equal(plan.unsupported[0].element,doc.getElementById('ink'));assert.equal(plan.unsupported[0].backgroundElement,doc.getElementById('card'));
+  assert.equal(plan.unsupported[0].reason,'full-background-required');
+  const subtree=analyzeNativeTextBackgrounds(doc.getElementById('ink'));
+  assert.equal(subtree.unsupported.length,1);assert.equal(subtree.unsupported[0].backgroundElement,doc.getElementById('card'));
+  const gray=new document.defaultView.DOMParser().parseFromString('<p id="dark" style="background:#111;color:#aaa">中灰文字依赖深底</p><p style="background:#f8f8f0;color:#888">浅底灰字不因移除底色变淡</p>','text/html');
+  assert.deepEqual(analyzeNativeTextBackgrounds(gray).unsupported.map(item=>item.element.id),['dark']);
+});
+
+test('background analysis exposes formulas and script bases that need local rendering without flattening readable prose', () => {
+  const doc=new document.defaultView.DOMParser().parseFromString('<section id="card" style="background:#e8f0fe"><p>可编辑正文</p><p><span id="formula" data-formula="x^2"><svg></svg></span></p><p>x<sub id="script">1</sub></p></section><p><span id="base" style="background:#ffcc00">F</span><sub id="local-script">peak</sub></p><p>x<sup id="nested-script"><b style="background:#ccddff">2</b></sup></p><section style="background:#fff"><p><span data-formula="y^2"></span>x<sup>2</sup></p></section>','text/html');
+  const before=doc.body.innerHTML,plan=analyzeNativeTextBackgrounds(doc);
+  assert.equal(doc.body.innerHTML,before);
+  assert.deepEqual(plan.unsupported.map(item=>[item.element.id,item.reason]),[['formula','formula-background'],['script','formula-background'],['local-script','formula-background'],['nested-script','formula-background']]);
+  assert.equal(plan.unsupported[0].backgroundElement,doc.getElementById('card'));
+  assert.equal(plan.unsupported[1].backgroundElement,doc.getElementById('card'));
+  assert.equal(plan.unsupported[2].backgroundElement,doc.getElementById('base'));
+  assert.equal(plan.unsupported[3].backgroundElement,doc.querySelector('#nested-script b'));
+  const separate=convert('<p><span style="background:#ffcc00">F</span></p><p><sub>peak</sub></p>');
+  assert.deepEqual(separate.blockingIssues,[],'a preceding paragraph is not a script base');
 });
 
 test('retains only marked source links using native link nodes and preserves nested supported styles', () => {

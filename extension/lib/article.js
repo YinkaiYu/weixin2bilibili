@@ -17,6 +17,10 @@ for (const side of ['top', 'right', 'bottom', 'left']) {
 }
 STYLE_PROPS.add('background-position-x');
 STYLE_PROPS.add('background-position-y');
+for (const property of 'grid-template-columns grid-template-rows grid-template-areas grid-column grid-column-start grid-column-end grid-row grid-row-start grid-row-end grid-area grid-auto-flow grid-auto-columns grid-auto-rows'.split(' ')) STYLE_PROPS.add(property);
+// These local sizing, clipping and stacking properties are needed when a grid
+// is retained as one composition. They are not enabled for ordinary page HTML.
+const COMPOSITE_STYLE_PROPS = new Set('aspect-ratio overflow overflow-x overflow-y opacity z-index transform transform-origin'.split(' '));
 const SVG_ATTRS = new Set('viewbox width height x y x1 x2 y1 y2 cx cy r rx ry d points fill fill-opacity stroke stroke-width stroke-linecap stroke-linejoin stroke-opacity opacity transform font-size font-family text-anchor dominant-baseline dx dy offset stop-color stop-opacity preserveaspectratio'.split(' '));
 const MATH_ATTRS = new Set('display mathvariant mathsize mathcolor mathbackground stretchy fence separator form lspace rspace linethickness numalign denomalign rowalign columnalign rowspacing columnspacing notation open close separators encoding'.split(' '));
 const IMAGE_ATTRS = new Set('src alt title width height data-type data-formula data-latex data-w data-h data-local-path data-sync-formula-image data-caption'.split(' '));
@@ -102,11 +106,17 @@ function blend(foreground, background) {
 
 function textReadableWithoutImage(element, omittedSolidBackground = null) {
   const walker = element.ownerDocument.createTreeWalker(element,4);
+  const samples=[];
   while (walker.nextNode()) {
     const text = walker.currentNode;
-    if (!normalizedText(text.textContent)) continue;
+    if (normalizedText(text.textContent)) samples.push(text.parentElement);
+  }
+  // A formula may have source only in an attribute and no text nodes. Its
+  // inherited foreground still needs a readable backdrop after conversion.
+  samples.push(...element.querySelectorAll(FORMULA_SELECTOR));
+  for (const sample of samples) {
     const ancestors = [];
-    for (let parent=text.parentElement;parent;parent=parent.parentElement) ancestors.unshift(parent);
+    for (let parent=sample;parent;parent=parent.parentElement) ancestors.unshift(parent);
     let foreground = [0,0,0,1], background = [255,255,255,1];
     for (const ancestor of ancestors) {
       const color = ancestor.style?.color;
@@ -138,11 +148,11 @@ function smallBackgroundTile(element) {
 
 function decorativeBackgroundKind(element) {
   if (element.matches(DECORATION_CONTENT) || element.querySelector(DECORATION_CONTENT)) return '';
+  const semantic=['alt','title','aria-label'].some(name=>normalizedText(element.getAttribute(name))) || element.getAttribute('role')==='img';
+  if(semantic) return '';
   const text=normalizedText(element.textContent);
   if (!text) {
-    const dimensions=['width','height'].map(name=>element.style[name].match(/^([\d.]+)px$/));
-    const semantic=['alt','title','aria-label'].some(name=>normalizedText(element.getAttribute(name))) || element.getAttribute('role')==='img';
-    return !semantic && dimensions.every(match=>match && Number(match[1])>0 && Number(match[1])<=48) ? 'empty' : '';
+    return ['presentation','none'].includes(element.getAttribute('role')?.trim().toLowerCase()) ? 'empty' : '';
   }
   const label = /^[qa]\d{1,4}[.:：、)）]?$/i.test(text);
   const shortHeading = /^h[1-6]$/.test(element.localName) && text.length<=40 && smallBackgroundTile(element);
@@ -161,154 +171,233 @@ function clearDecorativeBackground(element) {
   if (element.getAttribute('data-sync-unsupported')==='CSS 背景图') element.removeAttribute('data-sync-unsupported');
 }
 
-function pixelsEqual(value,pixels) {
-  return /^\d+(?:\.\d+)?(?:px)?$/.test(String(value)) && Number.parseFloat(value)===pixels;
-}
-
-function cornersEqual(css,pixels) {
-  return ['TopLeft','TopRight','BottomRight','BottomLeft'].every(corner=>String(css[`border${corner}Radius`]||css.borderRadius).split(/\s+/).every(value=>pixelsEqual(value,pixels)));
-}
-
 function hasBackgroundImage(css) {
-  // Chromium exposes the implicit image reset from background:<solid> as
-  // "initial"; JSDOM often exposes an empty value. This non-inherited property
-  // also resets to none for "unset". URLs, gradients and inherit stay protected.
+  // Chromium expands background:<solid> to image:initial; JSDOM exposes ''.
   return !['','none','initial','unset'].includes(css.backgroundImage.trim().toLowerCase());
 }
 
-function clearReviewedAnswerPanelBackgrounds(body) {
-  let removed=0;
-  const isColor=(value,r,g,b)=>{const color=cssColor(value);return color&&color[0]===r&&color[1]===g&&color[2]===b&&color[3]===1;};
-  for(const panel of body.querySelectorAll('section')) {
-    const css=panel.style;
-    // This reviewed question/answer template uses a pale decorative container
-    // around several ordinary paragraphs. Do not generalize to inline highlights,
-    // independent formula cards or white text supported by a colored heading.
-    if(!/^答[:：]/.test(normalizedText(panel.textContent)) || panel.querySelectorAll('p,ol,ul').length<2) continue;
-    if(!isColor(css.backgroundColor,239,239,246) || !isColor(css.color,62,62,62) || !['400','normal'].includes(css.fontWeight)) continue;
-    if(!cornersEqual(css,6) || ['Top','Right','Bottom','Left'].some(side=>!pixelsEqual(css[`padding${side}`],10)) || !pixelsEqual(css.marginTop,20) || !pixelsEqual(css.marginBottom,20) || !pixelsEqual(css.marginLeft,0) || !pixelsEqual(css.marginRight,0)) continue;
-    if(['Top','Right','Bottom','Left'].some(side=>css[`border${side}Width`]!=='2px'||css[`border${side}Style`]!=='solid'||!isColor(css[`border${side}Color`],46,49,145))) continue;
-    if(hasBackgroundImage(css) || panel.hasAttribute('data-lazy-bgimg') || panel.hasAttribute('data-sync-background-url')) continue;
-    if(!textReadableWithoutImage(panel,panel)) continue;
-    css.removeProperty('background');css.removeProperty('background-color');removed++;
+function cssArguments(value) {
+  const parts=[];let depth=0,start=0;
+  for(let index=0;index<value.length;index++) {
+    if(value[index]==='(') depth++;
+    if(value[index]===')' && --depth<0) return null;
+    if(value[index]===',' && depth===0){parts.push(value.slice(start,index).trim());start=index+1;}
   }
-  return removed;
+  if(depth!==0) return null;
+  parts.push(value.slice(start).trim());return parts;
 }
 
-function clearReviewedFormulaCardDecorations(body) {
-  let removed=0;
-  const isColor=(value,r,g,b)=>{const color=cssColor(value);return color&&color[0]===r&&color[1]===g&&color[2]===b&&color[3]===1;};
-  for(const card of body.querySelectorAll('section')) {
-    const css=card.style, scripts=[...card.querySelectorAll('sub')];
-    // This reviewed formula's two subscripts and brown text remain native. The
-    // cream card and border are decoration; unknown colored cards stay intact.
-    if(normalizedText(card.textContent)!=='ΔF=Fpeak−Fbaseline' || scripts.length!==2 || scripts[0].textContent!=='peak' || scripts[1].textContent!=='baseline') continue;
-    if(card.querySelector('img,svg,math,table,[data-formula],[data-latex]') || hasBackgroundImage(css)) continue;
-    if(!isColor(css.backgroundColor,252,248,243) || !isColor(css.color,130,66,46) || css.fontSize!=='20px' || css.textAlign!=='center' || !cornersEqual(css,10) || !pixelsEqual(css.paddingTop,18) || !pixelsEqual(css.paddingBottom,18) || !pixelsEqual(css.paddingLeft,12) || !pixelsEqual(css.paddingRight,12)) continue;
-    if(['Top','Right','Bottom','Left'].some(side=>css[`border${side}Width`]!=='1px'||css[`border${side}Style`]!=='solid'||!isColor(css[`border${side}Color`],233,219,207))) continue;
-    if(!textReadableWithoutImage(card,card)) continue;
-    css.removeProperty('background');css.removeProperty('background-color');
-    for(const property of Array.from(css)) if(property==='border'||property.startsWith('border-')) css.removeProperty(property);
-    removed++;
+function resolveGradientVariables(value,element,chain=[]) {
+  if(value.length>8192 || chain.length>12) return null;
+  let result=value;
+  for(let step=0;step<32;step++) {
+    const match=/var\(/i.exec(result);
+    if(!match) return result;
+    let depth=1,end=match.index+4;
+    for(;end<result.length&&depth;end++){if(result[end]==='(')depth++;else if(result[end]===')')depth--;}
+    if(depth) return null;
+    const args=cssArguments(result.slice(match.index+4,end-1)),name=args?.[0];
+    if(!name || !/^--[\w-]+$/.test(name)) return null;
+    let definition='';
+    for(let ancestor=element;ancestor&&!definition;ancestor=ancestor.parentElement) definition=ancestor.style?.getPropertyValue(name).trim()||'';
+    let replacement=definition && !chain.includes(name)?resolveGradientVariables(definition,element,[...chain,name]):null;
+    if(replacement===null && args.length>1) replacement=resolveGradientVariables(args.slice(1).join(','),element,[...chain,name]);
+    if(replacement===null || !replacement) return null;
+    result=result.slice(0,match.index)+replacement+result.slice(end);
   }
-  return removed;
+  return null;
 }
 
-// Reviewed template assets: transparent leaves, dots and brush shapes only.
-// Identity plus structure is required; unknown collages are never deleted.
-const REVIEWED_COVER_ORNAMENTS = new Set([
-  "Q5JJsLWYMJUgWzYQ4YibDBNQnPvFy5a4tyzWtTELMFQhOQcHC8VhSt8dvdqc7XhQRibqcErGcdEyLKVQ9Ly057zDrBKgNfsNDFPu53zZyn0tE",
-  "Q5JJsLWYMJVib8nfqMDibiaiaoEEO2iaiaqO4Fric7nQCJCQxZUbXbaLibckEAT44TVdR297YYvGtSTQJ2bibSIpz83T2N6zxicEM8jp922M0z6tblpmk",
-  "Q5JJsLWYMJUXV0nNxkrHV5jARdynE0XodLyh1f1F0ZtQsDItzRXhBq4Bwl3PNiaCMxKt8ROAaibgDibW2Piby8MCmL2icsuuJkibVAKqBl2b8KZy4",
-  "Q5JJsLWYMJXgfaiarNOHWFD2zsarngWsCFSQ4XDIBicXvSjTnSaImLlPib5sicgSO7LmBwlU1YjdXSbqJK1BYQZHGsBHIKIR3fEyYAN5fB0WQTo",
-  "Q5JJsLWYMJVymW3L5EdOeQwJiaabS39CRr1xnGZuXBjmbeGicUtqFnj4U8icQeDAMk3HK6FlGDL2W41p06Dk7Oibkw75XVTjBRQlicfNItib7dmz0",
-  "Q5JJsLWYMJUibnCc0SwNCjZYDXpy9EJzD3FzXpiae39SJRagYNDtPbOGRQhQG0oKCibics9RChWv0GhPCKUW7ZsvQEwKiawp3xKeJ0w6QT2xFZVY",
-  "Q5JJsLWYMJUm2lZD0zJLVLXT6YnpYUicLTvxicCPK0YmurOMuzMV40m0uaMRW0JOwJwd2sa2qt6ZDVTtjGia4iaiciaTwoNiaJPNLh8l4DN0IAkRYE",
-  "Q5JJsLWYMJV30mwjicRXXnzVpRcUFzGYegcVh7vnwPF31picqUxskCrxwXibx8rXKCtjSn9ofcHCA1QKDSL5rPhESLE7OJuqYrr0JKVyM5K10E",
-  "Q5JJsLWYMJWS9l5PL5eGAPTnia3lpNDckFzicXGYQHWB7bDlfOUzrIic0TaCUmdaoIRBIQgEj3TyP6fJKHNxB8jicmcS7cHWaoSRahzZ1kdzn6I",
-  "Q5JJsLWYMJUHCcBRrQVjricwZNiaVyzrkEEWOAwWPLw1KrVAE0X5R0BibGWoT8qeRTVzTWoWqgXFff7WbYSeav5I5nuZ65qM3mVduLUvULILic8",
-  "Q5JJsLWYMJUe6LrN9E3rx3LPXkZDK4J9RibicOGtN2WOWUV5l6ofOvBiaDuDD9vNAqRmJdfKZSAmOQasXYb91SqjmYnyy5mGwt1ibr7DSmmQWSA",
-  "Q5JJsLWYMJXD5snfggprIKX1n4cH9mm5na9Wkxf7t7zeAu8gF3ciaic3oPP1HmUoeGibHjLaevBlVpKvr1h9JhoLRd0HcSfgOrgecXibQVbpDk8",
-  "Q5JJsLWYMJWvkatACDQ06oBFkWIqST12ZHYe1icsf3tuesNJK0FDKKZXDPpcn6nyDWVqadL7kXziaos0WzSch9ZTteCZvjcATic7Uh8ia6V2Cvc",
-  "Q5JJsLWYMJX8YjXmljjRVAJplicrgdg4R2DSP4Z8wSibPMiaOcPRIsPxo4X222dqicaxCIAdN8XLHY1ylQQfynSlOCTJrW4nAXF1HHm2cucXndk"
-]);
-
-function ornamentAssetId(image) {
-  try {
-    const url=new URL(image.getAttribute('data-src') || image.getAttribute('src'),'https://mp.weixin.qq.com/');
-    return url.hostname==='mmbiz.qpic.cn'?url.pathname.split('/')[2]:'';
-  } catch { return ''; }
+function gradientMarkerColor(value,element) {
+  if(!['span','strong','b','em','i','u','s','a'].includes(element.localName) || element.querySelector('p,section,div,img,svg,math,table')) return '';
+  const ownSolid=cssColor(element.style.backgroundColor);
+  if(ownSolid?.[3]>0) return '';
+  const match=value.match(/^linear-gradient\((.*)\)$/i);
+  if(!match) return '';
+  const args=cssArguments(match[1]);
+  if(args?.length===3 && /^(?:to bottom|180deg)$/i.test(args[0])) args.shift();
+  if(args?.length!==2) return '';
+  const stops=args.map(arg=>{const stop=arg.match(/^(.*?)\s+([\d.]+)%$/);return stop?{text:stop[1],color:cssColor(stop[1]),position:Number(stop[2])}:null;});
+  if(stops.some(stop=>!stop?.color) || stops[0].color[3]!==0 || stops[1].color[3]===0 || stops[0].position<=0 || stops[0].position>=100 || stops[1].position>stops[0].position) return '';
+  return stops[1].text;
 }
 
-function clearTemplateGeometry(element) {
-  for(const node of [element,...element.querySelectorAll('*')]) for(const property of Array.from(node.style||[])) {
-    if (/^(?:display|position|z-index|transform|aspect-ratio|grid(?:-|$)|width|height|min-width|max-width|min-height|max-height|margin(?:-|$)|padding(?:-|$)|flex(?:-|$)|align-self)/.test(property)) node.style.removeProperty(property);
+function normalizeGradientBackgrounds(body) {
+  const counts={decorative:0,markers:0,raster:0,unsupported:0};
+  for(const element of body.querySelectorAll('*')) {
+    element.removeAttribute('data-sync-gradient');
+    if(!element.style) continue;
+    const image=element.style.backgroundImage;
+    const raw=image || element.style.background;
+    if(!/gradient\(/i.test(raw)) continue;
+    const resolved=resolveGradientVariables(raw,element);
+    const unsafe=!resolved || /url\s*\(|expression\s*\(|var\s*\(|@import|javascript:/i.test(resolved);
+    if(unsafe) {
+      element.setAttribute('data-sync-unsupported','CSS 渐变背景（变量无法安全解析）');counts.unsupported++;continue;
+    }
+    // A shorthand containing var() may remain unexpanded in CSSOM. Resolve
+    // only this declaration, then let CSSOM parse its image/position/color.
+    if(!image) element.style.background=resolved;
+    else element.style.backgroundImage=resolved;
+    const gradient=element.style.backgroundImage;
+    if(!/gradient\(/i.test(gradient) || /var\s*\(/i.test(gradient)) {
+      element.setAttribute('data-sync-unsupported','CSS 渐变背景（变量无法安全解析）');counts.unsupported++;continue;
+    }
+    if(decorativeBackgroundKind(element)==='background') {
+      clearDecorativeBackground(element);counts.decorative++;continue;
+    }
+    const marker=gradientMarkerColor(gradient,element);
+    if(marker) {
+      element.style.removeProperty('background-image');
+      element.style.backgroundColor=marker;counts.markers++;continue;
+    }
+    const layers=cssArguments(gradient);
+    if(layers?.every(layer=>/^(?:linear|radial)-gradient\(/i.test(layer))) {
+      element.setAttribute('data-sync-gradient','true');counts.raster++;
+    } else {
+      element.setAttribute('data-sync-unsupported','CSS 渐变背景（当前无法完整转换）');counts.unsupported++;
+    }
   }
+  return counts;
+}
+
+function framedTextCard(element) {
+  const css=element.style, background=cssColor(css.backgroundColor);
+  if(!background || background[3]===0 || !['','block'].includes(css.display) || hasBackgroundImage(css)) return false;
+  if(element.hasAttribute('data-lazy-bgimg') || element.hasAttribute('data-sync-background-url') || element.hasAttribute('role') || element.hasAttribute('aria-label') || element.hasAttribute('title')) return false;
+  const sides=['Top','Right','Bottom','Left'];
+  const borders=sides.map(side=>[css['border'+side+'Width'],css['border'+side+'Style'],css['border'+side+'Color']]);
+  if(borders.some(([width,style])=>!(Number.parseFloat(width)>0) || !['solid','dashed','dotted','double'].includes(style))) return false;
+  if(borders.some(border=>border.join('|')!==borders[0].join('|'))) return false;
+  const positive=value=>Number.parseFloat(value)>0;
+  if(!['Top','Bottom'].some(side=>positive(css['padding'+side])) || !['Left','Right'].some(side=>positive(css['padding'+side]))) return false;
+  // Figure/legend/code context and graphical contents can give the backdrop a
+  // meaning that text contrast alone cannot establish. Source-backed formula
+  // fallbacks are excluded because those graphics will become native formulas.
+  if(element.closest('figure,figcaption,table,pre,code,blockquote') || element.querySelector('figure,figcaption,table,pre,code,blockquote,[role],[aria-label]')) return false;
+  const graphics=[...element.querySelectorAll('img,svg,math,video,audio,canvas,object,embed,iframe')];
+  if(graphics.some(node=>!node.closest(FORMULA_SELECTOR))) return false;
+  return true;
+}
+
+function clearTextCardDecorations(body) {
+  const counts={panels:0,formulas:0};
+  for(const card of body.querySelectorAll('section,div')) {
+    if(!framedTextCard(card) || !textReadableWithoutImage(card,card)) continue;
+    const paragraphs=[...card.querySelectorAll('p,li')].filter(node=>normalizedText(node.textContent) || node.querySelector(FORMULA_SELECTOR));
+    const formula=card.querySelector(FORMULA_SELECTOR) || (card.querySelector('sub,sup') && /[=≈≃≅≡∝<>≤≥]/.test(card.textContent));
+    if(paragraphs.length<2 && !formula) continue;
+    // Only box decoration is removed; inline highlights and all authored
+    // text/formulas remain. Neither the question wording nor palette is a key.
+    card.style.removeProperty('background');card.style.removeProperty('background-color');
+    for(const property of Array.from(card.style)) if(property==='border'||property.startsWith('border-')) card.style.removeProperty(property);
+    counts[paragraphs.length<2?'formulas':'panels']++;
+  }
+  return counts;
 }
 
 function containsTemplateMedia(element,selector) {
   return [...element.querySelectorAll(selector)].some(node=>!(node.localName==='svg' && !node.childElementCount && !normalizedText(node.textContent) && /^0\s+0\s+1\s+1$/.test(node.getAttribute('viewBox')||'')));
 }
 
-function cleanReviewedTemplate(body,imageIndices) {
+function removeDeclaredDecorativeImages(body,imageIndices) {
   const removed=[];
-  const media='svg,math,table,video,audio,[data-formula],[data-latex],figcaption';
-  const sourceOf=image=>image.getAttribute('data-src') || image.getAttribute('src') || '';
-  const forget=(image,reason)=>removed.push({imageIndex:imageIndices.get(image),sourceUrl:sourceOf(image),reason});
-  let recognized=false;
-  for(const grid of [...body.querySelectorAll('section,div')]) {
-    if(grid.style.display!=='grid' || grid.style.gridTemplateColumns!=='100%' || grid.style.gridTemplateRows!=='100%' || containsTemplateMedia(grid,media)) continue;
-    const branches=[...grid.children], pictures=[...grid.querySelectorAll('img')];
-    const imageBranches=branches.filter(branch=>branch.querySelectorAll('img').length===1&&!normalizedText(branch.textContent));
-    const textBranches=branches.filter(branch=>normalizedText(branch.textContent));
-    if(pictures.length!==14 || imageBranches.length!==14 || textBranches.length!==3) continue;
-    if(branches.some(branch=>!imageBranches.includes(branch)&&!textBranches.includes(branch)&&containsTemplateMedia(branch,media))) continue;
-    if(pictures.some(image=>!REVIEWED_COVER_ORNAMENTS.has(ornamentAssetId(image))) || new Set(pictures.map(ornamentAssetId)).size!==14) continue;
-    if([...imageBranches,...textBranches].some(branch=>branch.style.gridColumnStart!=='1'||branch.style.gridRowStart!=='1')) continue;
-    if(textBranches.some(branch=>branch.querySelector('img') || normalizedText(branch.textContent).length>60)) continue;
-    recognized=true;
-    for(const branch of imageBranches) {forget(branch.querySelector('img'),'reviewed-cover-ornament');branch.remove();}
-    for(const branch of [...grid.children]) if(!normalizedText(branch.textContent)) branch.remove();
-    clearTemplateGeometry(grid);
-  }
-  if(!recognized) return removed;
-  // This frame's chapter badges and paired heading ornaments are reviewed roles,
-  // not a global rule that small images, formula pictures or cartoons are empty.
-  for(const row of [...body.querySelectorAll('section,div')]) {
-    if(row.style.display!=='flex' || containsTemplateMedia(row,media)) continue;
-    const children=[...row.children], text=normalizedText(row.textContent), pictures=[...row.querySelectorAll('img')];
-    const noSemanticImage=image=>!image.hasAttribute('data-formula')&&!image.hasAttribute('data-latex')&&!image.hasAttribute('data-sync-formula-image')&&!/(?:formula|latex|math|equation)/i.test(image.getAttribute('class')||'')&&image.getAttribute('type')!=='latex'&&image.getAttribute('data-type')!=='latex'&&!image.getAttribute('title')&&['','图片'].includes(image.getAttribute('alt')||'');
-    // Live lazy images keep width:100% (or no width) until decoded; saved HTML
-    // often replaces that with a pixel width. The reviewed fixed-size wrapper is
-    // the stable role marker, while incompatible explicit image widths stay safe.
-    const ornamentBranch=(branch,width)=>branch && !normalizedText(branch.textContent) && branch.querySelectorAll('img').length===1 && (()=>{const image=branch.querySelector('img');return noSemanticImage(image)&&['','auto','100%',width].includes(image.style.width)&&image.parentElement.style.width===width;})();
-    if(children.length===2 && pictures.length===1 && /^PART\d{1,2}/i.test(text) && text.length<=80 && ornamentBranch(children[0],'58px') && !children[1].querySelector('img')) {
-      forget(pictures[0],'reviewed-chapter-badge');children[0].remove();
-    } else if(children.length===3 && pictures.length===2 && text.length>0 && text.length<=40 && ornamentBranch(children[0],'34px') && ornamentBranch(children[2],'34px') && !children[1].querySelector('img') && normalizedText(children[1].textContent)===text) {
-      for(const branch of [children[0],children[2]]) {forget(branch.querySelector('img'),'reviewed-paired-heading-ornament');branch.remove();}
-    }
+  for(const image of [...body.querySelectorAll('img')]) {
+    // Small size, repetition, generic alt text and a position beside a title
+    // are not proof that an image is expendable.
+    if(!['presentation','none'].includes(image.getAttribute('role')?.trim().toLowerCase())) continue;
+    if(image.matches(FORMULA_SELECTOR) || image.closest('figure,figcaption,table,'+FORMULA_SELECTOR) ||
+       image.hasAttribute('data-sync-formula-image') || /(?:formula|latex|math|equation)/i.test(image.getAttribute('class')||'') ||
+       image.getAttribute('type')==='latex' || image.getAttribute('data-type')==='latex' ||
+       ['alt','title','aria-label','data-caption'].some(name=>normalizedText(image.getAttribute(name)))) continue;
+    let anchor=image;
+    while(anchor.parentElement!==body && !normalizedText(anchor.parentElement.textContent) && !anchor.parentElement.querySelector('svg,math,hr')) anchor=anchor.parentElement;
+    if(firstCaptionCandidate(nextCaptionNode(anchor,body))) continue;
+    removed.push({imageIndex:imageIndices.get(image),sourceUrl:image.getAttribute('data-src')||image.getAttribute('src')||'',reason:'explicit-presentation-role'});
+    image.remove();
   }
   return removed;
+}
+
+function gridCell(css) {
+  const area=css.gridArea.trim();
+  if(/^[a-z_][\w-]*$/i.test(area) && !['auto','initial','inherit','unset'].includes(area)) return 'area:'+area;
+  const parts=area.split('/').map(value=>value.trim());
+  const row=css.gridRowStart || css.gridRow.split('/')[0].trim() || parts[0];
+  const column=css.gridColumnStart || css.gridColumn.split('/')[0].trim() || parts[1];
+  if(!row || !column || ['auto','initial','inherit','unset'].includes(row) || ['auto','initial','inherit','unset'].includes(column)) return '';
+  return row+'|'+column;
+}
+
+function markCompositeLayouts(body) {
+  // Internal markers are recomputed from the retained layout, never trusted
+  // merely because untrusted source HTML supplied their attribute name.
+  for(const node of body.querySelectorAll('[data-sync-composite-layout]')) node.removeAttribute('data-sync-composite-layout');
+  let count=0;
+  for(const grid of body.querySelectorAll('section,div,figure')) {
+    if(!['grid','inline-grid'].includes(grid.style.display)) continue;
+    const cells=new Map();
+    for(const child of grid.children) {
+      const key=gridCell(child.style);
+      if(!key || (!normalizedText(child.textContent) && !child.matches('img,svg,math') && !child.querySelector('img,svg,math,'+FORMULA_SELECTOR))) continue;
+      const cell=cells.get(key)||[];cell.push(child);cells.set(key,cell);
+    }
+    if(![...cells.values()].some(cell=>cell.length>1 && cell.some(node=>node.matches('img,svg,math')||node.querySelector('img,svg,math')))) continue;
+    grid.setAttribute('data-sync-composite-layout','grid-overlay');count++;
+    for(const node of [grid,...grid.querySelectorAll('*')]) {
+      if(!node.style) continue;
+      // The renderer freezes the untransformed layout, then restores supported
+      // 2D transforms. 3D and unresolved geometry must never become a flat copy.
+      const unsupported=['translate','rotate','scale','perspective'].filter(property=>{
+        const value=node.style.getPropertyValue(property).trim().toLowerCase();
+        return value && !['none','initial','unset'].includes(value);
+      });
+      const transform=node.style.transform.trim();
+      if(transform && !['none','initial','unset'].includes(transform.toLowerCase()) && !/^(?:(?:matrix|translate[xy]?|scale[xy]?|rotatez?|skew[xy]?)\(\s*[-+\d.e%\s,a-z]+\)\s*)+$/i.test(transform)) unsupported.push('transform');
+      if(node.style.getPropertyValue('-webkit-transform').trim() && !transform) unsupported.push('-webkit-transform');
+      const position=node.style.position;
+      if(position && !['static','initial','unset'].includes(position)) unsupported.push('position');
+      for(const property of COMPOSITE_STYLE_PROPS) if(/url\s*\(|expression\s*\(|@import|javascript:|behavior:|var\s*\(/i.test(node.style.getPropertyValue(property))) unsupported.push(property);
+      if(unsupported.length) {
+        const reason='叠层排版的 '+[...new Set(unsupported)].join('/')+' 几何样式尚不支持';
+        const existing=node.getAttribute('data-sync-unsupported');
+        node.setAttribute('data-sync-unsupported',existing&&!existing.includes(reason)?existing+'、'+reason:existing||reason);
+      }
+    }
+  }
+  return count;
+}
+
+function characterCards(row) {
+  const cards=[...row.children];
+  if(cards.length<2 || cards.length>12 || cards.some(card=>card.style.display!=='inline-block') || containsTemplateMedia(row,'img,svg,math,table,[data-formula],[data-latex]')) return null;
+  if([row,...row.querySelectorAll('*')].some(node=>hasBackgroundImage(node.style)||node.hasAttribute('data-lazy-bgimg'))) return null;
+  const matches=cards.map(card=>normalizedText(card.textContent).match(/^(?:[a-züāáǎàēéěèīíǐìōóǒòūúǔùǖǘǚǜ]{1,12})?([\u3400-\u9fff])$/i));
+  if(matches.some(match=>!match)) return null;
+  const square=style=>/^[\d.]+(?:px|em|rem)$/.test(style.width) && Number.parseFloat(style.width)>0 && style.width===style.height && ['solid','dashed','dotted','double'].includes(style.borderStyle);
+  const letters=cards.map((card,index)=>[...card.querySelectorAll('*')].find(node=>square(node.style)&&normalizedText(node.textContent)===matches[index][1]));
+  return letters.some(letter=>!letter)?null:{cards,letters,text:matches.map(match=>match[1]).join('')};
 }
 
 function flattenCharacterCardHeadings(body) {
   let count=0;
   for(const row of [...body.querySelectorAll('section,div')]) {
-    const cards=[...row.children];
-    if(cards.length<2 || cards.length>8 || cards.some(card=>card.style.display!=='inline-block') || containsTemplateMedia(row,'img,svg,math,table,[data-formula],[data-latex]')) continue;
-    const matches=cards.map(card=>normalizedText(card.textContent).match(/^(?:[a-z]{1,8})?([\u3400-\u9fff])$/i));
-    if(matches.some(match=>!match)) continue;
-    const letters=cards.map((card,index)=>[...card.querySelectorAll('*')].find(node=>node.style.width==='40px'&&node.style.height==='40px'&&node.style.borderStyle==='solid'&&normalizedText(node.textContent)===matches[index][1]));
-    if(letters.some(letter=>!letter)) continue;
-    const paragraph=body.ownerDocument.createElement('p');paragraph.style.textAlign=row.style.textAlign||'center';
-    for(const [index,letter] of letters.entries()) {
-      const textNode=captionTextNodes(letter).find(node=>normalizedText(node.textContent)===matches[index][1]);
-      const style=captionTextStyle(textNode), span=body.ownerDocument.createElement('span');
-      span.textContent=matches[index][1];span.style.fontSize=String(style.size)+'px';span.style.fontWeight=style.weight;span.style.fontStyle=style.fontStyle;
-      if(style.color)span.style.color=style.color;
-      if(style.decoration)span.style.textDecoration=style.decoration;
-      paragraph.append(span);
-    }
+    if(!body.contains(row)) continue;
+    const group=characterCards(row);
+    if(!group) continue;
+    const paragraph=body.ownerDocument.createElement('p');
+    paragraph.setAttribute('style',row.getAttribute('style')||'');paragraph.style.textAlign=row.style.textAlign||'center';
+    const appendInline=(source,parent)=>{
+      if(source.nodeType===3){parent.append(source.cloneNode());return;}
+      if(source.nodeType!==1) return;
+      const tag=['strong','b','em','i','u','s','sup','sub','br'].includes(source.localName)?source.localName:'span';
+      const copy=body.ownerDocument.createElement(tag);
+      copy.setAttribute('style',source.getAttribute('style')||'');
+      for(const property of Array.from(copy.style)) if(/^(?:display|position|transform|width|height|min-|max-|margin|padding|border|flex|grid)/.test(property)) copy.style.removeProperty(property);
+      for(const child of source.childNodes) appendInline(child,copy);
+      parent.append(copy);
+    };
+    for(const card of group.cards) appendInline(card,paragraph);
     row.replaceWith(paragraph);count++;
   }
   return count;
@@ -395,6 +484,7 @@ function firstCaptionCandidate(node) {
 function associateImageCaptions(body) {
   let associated=0,ambiguous=0;
   for(const image of [...body.querySelectorAll('img')]) {
+    if(image.closest('[data-sync-composite-layout]')) continue;
     if(image.closest(FORMULA_SELECTOR) || image.hasAttribute('data-caption') || image.closest('figure')?.querySelector('figcaption')) continue;
     let container=image.parentElement;
     while(container!==body&&!CAPTION_BLOCKS.has(container.tagName)) container=container.parentElement;
@@ -572,8 +662,8 @@ function removeOpeningInteractionLead(body) {
 }
 
 function isTailHeading(element,body) {
-  if (element.querySelector('img,svg,math,video,audio')) return false;
-  let text = normalizedText(element.textContent).toLowerCase();
+  if (containsTemplateMedia(element,'img,svg,math,video,audio')) return false;
+  let text = (characterCards(element)?.text || normalizedText(element.textContent)).toLowerCase();
   text = text.replace(/^[\-—–·•|｜:：【】\[\]《》「」『』<>()（）]+|[\-—–·•|｜:：【】\[\]《》「」『』<>()（）]+$/g, '');
   if(['上期回顾', '往期回顾', '近期热门文章top10','上期也精彩'].includes(text)) return true;
   if(text==='投票' && /^h[1-6]$/.test(element.localName)) return true;
@@ -603,13 +693,20 @@ function sanitizeStyle(element) {
   element.removeAttribute('style');
   const probe = element.ownerDocument.createElement('span');
   probe.setAttribute('style', original);
+  const inComposite=Boolean(element.closest('[data-sync-composite-layout]'));
   for (const property of Array.from(probe.style)) {
     const value = probe.style.getPropertyValue(property).trim();
     if (property === 'background-image' && element.hasAttribute('data-sync-background-url')) {
       element.style.setProperty('background-image', `url("${element.getAttribute('data-sync-background-url').replace(/"/g, '%22')}")`);
       continue;
     }
-    if (!STYLE_PROPS.has(property) || /url\s*\(|expression\s*\(|@import|javascript:|behavior:|var\s*\(/i.test(value)) continue;
+    if (property === 'background-image' && /^(?:repeating-)?(?:linear|radial|conic)-gradient\(/i.test(value) && !/url\s*\(|expression\s*\(|var\s*\(/i.test(value)) {
+      element.style.setProperty(property,value);
+      continue;
+    }
+    const compositeProperty=inComposite && COMPOSITE_STYLE_PROPS.has(property);
+    const unsafe=/url\s*\(|expression\s*\(|@import|javascript:|behavior:|var\s*\(/i.test(value);
+    if (!(STYLE_PROPS.has(property)||compositeProperty) || unsafe) continue;
     element.style.setProperty(property, value);
   }
   // JSDOM enumerates a background shorthand while Chromium can expose expanded
@@ -641,6 +738,8 @@ function getBlockingIssues(body) {
   if (body.querySelector('table')) issues.add('原文含表格，B 站的原生排版兼容性需处理后再同步。');
   for (const node of body.querySelectorAll('[data-sync-unsupported]')) issues.add(`原文含暂不支持的 ${node.getAttribute('data-sync-unsupported')} 内容，已保留位置提示，请处理后同步。`);
   if (body.querySelector('[data-sync-background-url]')) issues.add('原文含 CSS 背景图，需要转换对应局部排版后同步。');
+  if (body.querySelector('[data-sync-gradient="true"]')) issues.add('原文含渐变背景，需要转换对应局部排版后同步。');
+  if (body.querySelector('[data-sync-composite-layout="grid-overlay"]')) issues.add('原文含叠层图片排版，需要保留完整组合并转换局部后同步。');
   for (const img of body.querySelectorAll('img')) {
     if (!img.getAttribute('src')) issues.add('有图片没有可读取的原始链接，请补充或删除该图片。');
     if (/^data:image\/svg\+xml/i.test(img.getAttribute('src') || '')) issues.add('原文含 SVG 图片，需要先转换成 PNG 等 B 站支持的图片格式。');
@@ -658,16 +757,23 @@ export function cleanArticle(html, options = {}) {
   stats.removedStanceStatements=removeStanceStatements(body);
   stats.removedOpeningLeads=removeOpeningInteractionLead(body);
   stats.removedComponentHints=removeComponentHints(body);
-  stats.flattenedCharacterHeadings=flattenCharacterCardHeadings(body);
   stats.trimmedTail=trimTail(body)?1:0;
-  const removedDecorativeImages=cleanReviewedTemplate(body,imageIndices);
+  const gradients=normalizeGradientBackgrounds(body);
+  stats.removedDecorativeBackgrounds+=gradients.decorative;
+  stats.adaptedGradientMarkers=gradients.markers;
+  stats.flattenedCharacterHeadings=flattenCharacterCardHeadings(body);
+  const removedDecorativeImages=removeDeclaredDecorativeImages(body,imageIndices);
   stats.removedDecorativeImages=removedDecorativeImages.length;
-  stats.removedAnswerPanelBackgrounds=clearReviewedAnswerPanelBackgrounds(body);
-  stats.removedFormulaCardDecorations=clearReviewedFormulaCardDecorations(body);
-  if(stats.removedDecorativeImages) warnings.push(`已略去 ${stats.removedDecorativeImages} 张已确认的模板装饰图，保留标题和正文配图。`);
-  if(stats.flattenedCharacterHeadings) warnings.push('已将横排单字装饰标题整理为一行文字，省略字卡和拼音装饰。');
-  if(stats.removedAnswerPanelBackgrounds) warnings.push(`已略去 ${stats.removedAnswerPanelBackgrounds} 处问答面板的装饰底色，保留正文、公式和文字高亮。`);
-  if(stats.removedFormulaCardDecorations) warnings.push('已略去已确认公式卡片的装饰底色和边框，保留公式文字、颜色和上下标。');
+  const cardDecorations=clearTextCardDecorations(body);
+  stats.removedAnswerPanelBackgrounds=cardDecorations.panels;
+  stats.removedFormulaCardDecorations=cardDecorations.formulas;
+  stats.compositeLayouts=markCompositeLayouts(body);
+  if(stats.removedDecorativeImages) warnings.push(`已略去 ${stats.removedDecorativeImages} 张明确标记为装饰的图片，保留标题和正文配图。`);
+  if(stats.flattenedCharacterHeadings) warnings.push('已将横排单字卡片整理为一行文字，保留文字与拼音。');
+  if(stats.removedAnswerPanelBackgrounds) warnings.push(`已略去 ${stats.removedAnswerPanelBackgrounds} 处正文卡片的装饰底色和边框，保留正文、公式和文字高亮。`);
+  if(stats.removedFormulaCardDecorations) warnings.push('已略去公式卡片的装饰底色和边框，保留公式文字、颜色和上下标。');
+  if(stats.compositeLayouts) warnings.push('有叠层图片无法仅凭结构判断是否为装饰，已保留完整组合，需转换对应局部排版。');
+  if(stats.adaptedGradientMarkers) warnings.push(`已将 ${stats.adaptedGradientMarkers} 处文字渐变底纹适配为原生高亮，保留底纹颜色。`);
   if(stats.removedStanceStatements) warnings.push('已清除独立的立场声明，保留作者、编辑和参考资料。');
   if(stats.removedOpeningLeads) warnings.push('已清除开头的微信互动赠书引导。');
   if(stats.removedComponentHints) warnings.push('已清除微信组件的滑动提示。');
@@ -749,7 +855,7 @@ export function cleanArticle(html, options = {}) {
     sanitizeStyle(element);
     for (const attribute of [...element.attributes]) {
       const key = attribute.name.toLowerCase();
-      let keep = key === 'style' || key === 'title' || key === 'dir' || key === 'lang';
+      let keep = ['style','title','dir','lang','role','aria-label'].includes(key);
       if (tag === 'img' && IMAGE_ATTRS.has(key)) keep = true;
       if (tag === 'a' && ['href','data-sync-source-link'].includes(key)) keep = true;
       if (SVG_TAGS.has(tag) && SVG_ATTRS.has(key)) keep = true;
@@ -757,7 +863,7 @@ export function cleanArticle(html, options = {}) {
       if (['td', 'th'].includes(tag) && ['colspan', 'rowspan'].includes(key)) keep = true;
       if (tag === 'ol' && key === 'start') keep = true;
       if (key === 'data-sync-unsupported') keep = true;
-      if (['data-formula', 'data-latex', 'data-sync-background-url'].includes(key)) keep = true;
+      if (['data-formula', 'data-latex', 'data-sync-background-url','data-sync-composite-layout','data-sync-gradient'].includes(key)) keep = true;
       if (key.startsWith('on') || /javascript:|expression\s*\(/i.test(attribute.value) && !['src','href'].includes(key) || /url\s*\(/i.test(attribute.value) && !['src','style','href'].includes(key)) keep = false;
       if (!keep) element.removeAttribute(attribute.name);
     }
@@ -790,7 +896,7 @@ export function cleanArticle(html, options = {}) {
   }
   // Work from leaves to roots so nested empty WeChat spacer sections also disappear.
   for (const element of [...body.querySelectorAll('*')].reverse()) {
-    if (EMPTY_BLOCKS.has(element.localName) && !normalizedText(element.textContent) && !element.querySelector('img,svg,math,hr,[data-sync-unsupported],[data-sync-background-url]') && !element.matches('[data-sync-background-url],[data-formula],[data-latex]')) {
+    if (EMPTY_BLOCKS.has(element.localName) && !element.closest('[data-sync-composite-layout]') && !normalizedText(element.textContent) && !element.querySelector('img,svg,math,hr,[data-sync-unsupported],[data-sync-background-url],[data-sync-gradient],[data-formula],[data-latex]') && !element.matches('[data-sync-background-url],[data-sync-gradient],[data-sync-unsupported],[data-formula],[data-latex]')) {
       element.remove(); stats.removedEmptyBlocks++;
     }
   }

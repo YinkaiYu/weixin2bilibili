@@ -12,7 +12,7 @@ body:
     attributes:
       label: 插件版本
       description: 可在浏览器的扩展管理页查看。
-      placeholder: 例如 0.1.9
+      placeholder: 例如 0.1.10
     validations:
       required: true
   - type: input

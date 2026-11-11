@@ -163,15 +163,17 @@ test('preserves unknown background position longhands for local rendering', () =
   assert.ok(result.blockingIssues.some(issue => issue.includes('CSS 背景图')));
 });
 
-test('omits small empty title decoration while preserving real images and the editable title',()=>{
-  const result=cleanArticle('<section style="background-color:orange"><strong style="color:black">实验器材</strong><section data-lazy-bgimg="https://mmbiz.qpic.cn/ribbon.png" style="width:20px;height:25px;margin-top:-14px;background-color:orange"><br></section></section><p><img src="https://mmbiz.qpic.cn/small.gif" width="20" height="25"></p>');
+test('omits explicitly decorative empty backgrounds while preserving unknown small information graphics',()=>{
+  const result=cleanArticle('<section style="background-color:orange"><strong style="color:black">实验器材</strong><section role="presentation" data-lazy-bgimg="https://mmbiz.qpic.cn/ribbon.png" style="width:200px;height:250px;margin-top:-14px;background-color:orange"><br></section></section><p><img src="https://mmbiz.qpic.cn/small.gif" width="20" height="25"></p><section data-lazy-bgimg="https://mmbiz.qpic.cn/small-chart.png" style="width:20px;height:25px"></section>');
   const content=doc(result.html);
   assert.equal(content.body.textContent,'实验器材');
   assert.ok(content.querySelector('strong'));
   assert.equal(content.querySelectorAll('img').length,1);
   assert.equal(content.querySelector('section').style.backgroundColor,'orange');
   assert.equal(result.stats.removedSmallDecorations,1);
-  assert.equal(result.stats.backgrounds,0);
+  assert.equal(result.stats.backgrounds,1);
+  assert.match(content.querySelector('[data-sync-background-url]').getAttribute('data-sync-background-url'),/small-chart/);
+  assert.equal(cleanArticle(result.html).html,result.html);
 });
 
 test('question and answer label backgrounds become editable text with original emphasis and color',()=>{
@@ -379,57 +381,113 @@ test('recognizes independent captioned images in a shared section and lifts one-
   assert.equal(cleanArticle(result.html).html,result.html);
 });
 
-const reviewedCoverTestIds=["Q5JJsLWYMJUgWzYQ4YibDBNQnPvFy5a4tyzWtTELMFQhOQcHC8VhSt8dvdqc7XhQRibqcErGcdEyLKVQ9Ly057zDrBKgNfsNDFPu53zZyn0tE","Q5JJsLWYMJVib8nfqMDibiaiaoEEO2iaiaqO4Fric7nQCJCQxZUbXbaLibckEAT44TVdR297YYvGtSTQJ2bibSIpz83T2N6zxicEM8jp922M0z6tblpmk","Q5JJsLWYMJUXV0nNxkrHV5jARdynE0XodLyh1f1F0ZtQsDItzRXhBq4Bwl3PNiaCMxKt8ROAaibgDibW2Piby8MCmL2icsuuJkibVAKqBl2b8KZy4","Q5JJsLWYMJXgfaiarNOHWFD2zsarngWsCFSQ4XDIBicXvSjTnSaImLlPib5sicgSO7LmBwlU1YjdXSbqJK1BYQZHGsBHIKIR3fEyYAN5fB0WQTo","Q5JJsLWYMJVymW3L5EdOeQwJiaabS39CRr1xnGZuXBjmbeGicUtqFnj4U8icQeDAMk3HK6FlGDL2W41p06Dk7Oibkw75XVTjBRQlicfNItib7dmz0","Q5JJsLWYMJUibnCc0SwNCjZYDXpy9EJzD3FzXpiae39SJRagYNDtPbOGRQhQG0oKCibics9RChWv0GhPCKUW7ZsvQEwKiawp3xKeJ0w6QT2xFZVY","Q5JJsLWYMJUm2lZD0zJLVLXT6YnpYUicLTvxicCPK0YmurOMuzMV40m0uaMRW0JOwJwd2sa2qt6ZDVTtjGia4iaiciaTwoNiaJPNLh8l4DN0IAkRYE","Q5JJsLWYMJV30mwjicRXXnzVpRcUFzGYegcVh7vnwPF31picqUxskCrxwXibx8rXKCtjSn9ofcHCA1QKDSL5rPhESLE7OJuqYrr0JKVyM5K10E","Q5JJsLWYMJWS9l5PL5eGAPTnia3lpNDckFzicXGYQHWB7bDlfOUzrIic0TaCUmdaoIRBIQgEj3TyP6fJKHNxB8jicmcS7cHWaoSRahzZ1kdzn6I","Q5JJsLWYMJUHCcBRrQVjricwZNiaVyzrkEEWOAwWPLw1KrVAE0X5R0BibGWoT8qeRTVzTWoWqgXFff7WbYSeav5I5nuZ65qM3mVduLUvULILic8","Q5JJsLWYMJUe6LrN9E3rx3LPXkZDK4J9RibicOGtN2WOWUV5l6ofOvBiaDuDD9vNAqRmJdfKZSAmOQasXYb91SqjmYnyy5mGwt1ibr7DSmmQWSA","Q5JJsLWYMJXD5snfggprIKX1n4cH9mm5na9Wkxf7t7zeAu8gF3ciaic3oPP1HmUoeGibHjLaevBlVpKvr1h9JhoLRd0HcSfgOrgecXibQVbpDk8","Q5JJsLWYMJWvkatACDQ06oBFkWIqST12ZHYe1icsf3tuesNJK0FDKKZXDPpcn6nyDWVqadL7kXziaos0WzSch9ZTteCZvjcATic7Uh8ia6V2Cvc","Q5JJsLWYMJX8YjXmljjRVAJplicrgdg4R2DSP4Z8wSibPMiaOcPRIsPxo4X222dqicaxCIAdN8XLHY1ylQQfynSlOCTJrW4nAXF1HHm2cucXndk"];
-
-function reviewedCoverFixture(ids=reviewedCoverTestIds) {
-  const layers=ids.map(id=>'<section style="grid-column-start:1;grid-row-start:1"><img alt="图片" data-src="https://mmbiz.qpic.cn/mmbiz_png/'+id+'/640?wx_fmt=png"></section>').join('');
-  const text=['标题一','标题二','标题三'].map(t=>'<section style="grid-column-start:1;grid-row-start:1;font-weight:bold;color:#8a4400">'+t+'</section>').join('');
-  return '<section style="display:grid;grid-template-columns:100%;grid-template-rows:100%">'+layers+text+'<section style="padding-top:124.63%"></section></section>';
+function overlayFixture({prefix='https://mmbiz.qpic.cn/example-',count=3,cell='grid-row:1;grid-column:1',title='研究观察'}={}) {
+  const images=Array.from({length:count},(_,i)=>'<section style="'+cell+'"><img alt="图片" src="'+prefix+i+'.png"></section>').join('');
+  return '<section style="display:grid;grid-template-columns:100%;grid-template-rows:auto">'+images+'<section style="'+cell+';font-weight:bold">'+title+'</section></section>';
 }
-const ornamentBranchFixture=width=>'<section><section style="width:'+width+'px"><img alt="图片" style="width:'+width+'px" src="https://mmbiz.qpic.cn/ornament.png"></section></section>';
 
-test('omits only the reviewed cover template and its verified chapter and paired heading ornament roles',()=>{
-  const chapter='<section style="display:flex">'+ornamentBranchFixture(58)+'<section>PART 01章节标题</section></section>';
-  const paired='<section style="display:flex">'+ornamentBranchFixture(34)+'<section>中间标题</section>'+ornamentBranchFixture(34)+'</section>';
-  const content='<p><img src="https://mmbiz.qpic.cn/chart.png"></p><p><img width="34" src="https://mmbiz.qpic.cn/tiny-real.png"></p><p><img data-formula="x^2" src="https://mmbiz.qpic.cn/formula.png"></p>';
-  const result=cleanArticle(reviewedCoverFixture()+chapter+paired+content), d=doc(result.html);
-  assert.equal(result.stats.removedDecorativeImages,17);
-  assert.deepEqual(result.removedDecorativeImages.map(x=>x.imageIndex),Array.from({length:17},(_,i)=>i));
-  assert.deepEqual(result.removedDecorativeImages.slice(14).map(x=>x.reason),['reviewed-chapter-badge','reviewed-paired-heading-ornament','reviewed-paired-heading-ornament']);
-  assert.equal(d.images.length,3);
-  assert.ok(d.querySelector('img[data-formula]'));
-  assert.equal(d.body.textContent,'标题一标题二标题三PART 01章节标题中间标题');
-  assert.equal(cleanArticle(result.html).html,result.html);
+test('removes only explicitly declared presentation images regardless of asset identity or dimensions',()=>{
+  const result=cleanArticle('<p>标题</p><img role="presentation" alt="" width="900" src="https://mmbiz.qpic.cn/new-art.png"><img role="none" alt="" width="27" src="https://mmbiz.qpic.cn/changed-icon.gif"><p><img width="27" src="https://mmbiz.qpic.cn/data-chart.png"></p>');
+  assert.equal(result.stats.removedDecorativeImages,2);
+  assert.deepEqual(result.removedDecorativeImages.map(x=>x.imageIndex),[0,1]);
+  assert.deepEqual(result.removedDecorativeImages.map(x=>x.reason),['explicit-presentation-role','explicit-presentation-role']);
+  assert.equal(doc(result.html).images[0].getAttribute('src'),'https://mmbiz.qpic.cn/data-chart.png');
+  assert.equal(doc(result.html).body.textContent,'标题');
 });
 
-test('retains unknown collage images and small illustrations outside the reviewed template',()=>{
-  const unknown=[...reviewedCoverTestIds];unknown[5]='unknown-real-content';
-  const chapter='<section style="display:flex">'+ornamentBranchFixture(58)+'<section>PART 01章节标题</section></section>';
-  const result=cleanArticle(reviewedCoverFixture(unknown)+chapter);
-  assert.equal(result.stats.removedDecorativeImages,0);
-  assert.equal(result.stats.images,15);
-  const formula=cleanArticle(reviewedCoverFixture()+chapter.replace('alt="图片"','data-formula="x^2"'));
-  assert.equal(formula.stats.removedDecorativeImages,14);
-  assert.equal(formula.stats.formulas,1);
-  for(const attribute of ['class="formula"','class="latex"','data-type="latex"']) {
-    const semantic=cleanArticle(reviewedCoverFixture()+chapter.replace('alt="图片"',`${attribute} alt="图片"`));
-    assert.equal(semantic.stats.removedDecorativeImages,14,attribute);
-    assert.equal(doc(semantic.html).images.length,1,attribute);
+test('retains semantic images even with presentation roles and never guesses from tiny size or heading position',()=>{
+  const guards=['class="formula"','data-formula="x^2"','data-type="latex"','alt="光谱数据"','title="实验结果"','aria-label="趋势图"','data-caption="一张内容图"'];
+  for(const guard of guards) {
+    const result=cleanArticle('<img role="presentation" '+guard+' width="14" src="https://mmbiz.qpic.cn/content.png">');
+    assert.equal(result.stats.removedDecorativeImages,0,guard);assert.equal(result.stats.images,1,guard);
   }
+  const result=cleanArticle('<section style="display:flex"><img alt="" width="20" src="https://mmbiz.qpic.cn/a.png"><section>任意标题</section><img alt="" width="20" src="https://mmbiz.qpic.cn/b.png"></section><figure><img role="none" alt="" src="https://mmbiz.qpic.cn/chart.png"><figcaption>测量结果</figcaption></figure>');
+  assert.equal(result.stats.removedDecorativeImages,0);
+  assert.equal(result.stats.images,3);
+  const caption=cleanArticle('<p><img role="presentation" alt="" src="https://mmbiz.qpic.cn/chart.png"></p><p style="color:#888;font-size:14px;text-align:center">测量结果曲线</p><p>正文继续。</p>');
+  assert.equal(caption.stats.images,1);assert.equal(caption.stats.captions,1);
+  assert.equal(doc(caption.html).querySelector('figcaption').textContent,'测量结果曲线');
 });
 
-test('flattens verified horizontal character cards into one editable title while retaining emphasis and color',()=>{
-  const card=(pinyin,char)=>'<section style="display:inline-block">'+pinyin+'<section style="width:40px;height:40px;border:1px solid #aaa"><p><strong style="font-size:20px;color:#fe9c00">'+char+'</strong></p></section></section>';
-  const result=cleanArticle('<section>'+card('fu','福')+card('li','利')+card('shi','时')+card('jian','间')+'</section>');
-  const d=doc(result.html);
-  assert.equal(result.stats.flattenedCharacterHeadings,1);
-  assert.equal(d.body.textContent,'福利时间');
-  assert.equal(d.querySelectorAll('p').length,1);
-  assert.ok([...d.querySelectorAll('span')].every(s=>s.style.fontWeight==='bold'&&s.style.color==='rgb(254, 156, 0)'));
+test('preserves arbitrary overlay assets and marks their complete layout for local rendering',()=>{
+  for(const options of [
+    {},
+    {prefix:'https://mmbiz.qpic.cn/replaced-',count:5,cell:'grid-row-start:2;grid-column-start:3',title:'另一个信息图'},
+    {prefix:'https://mmbiz.qpic.cn/third-',count:2,cell:'grid-area:poster',title:'温度与压力'},
+  ]) {
+    const result=cleanArticle(overlayFixture(options)), d=doc(result.html);
+    assert.equal(result.stats.removedDecorativeImages,0);
+    assert.equal(result.stats.images,options.count||3);
+    assert.equal(result.stats.compositeLayouts,1);
+    assert.equal(d.querySelector('[data-sync-composite-layout]').style.gridTemplateColumns,'100%');
+    assert.ok(result.blockingIssues.some(x=>x.includes('叠层')));
+    assert.ok(result.warnings.some(x=>x.includes('无法仅凭结构')));
+    assert.equal(cleanArticle(result.html).html,result.html);
+  }
+  const spacer=cleanArticle(overlayFixture().replace('</section><section style="grid-row:1;grid-column:1;font-weight:bold">','</section><section style="padding-top:137%"></section><section style="grid-row:1;grid-column:1;font-weight:bold">'));
+  assert.ok([...doc(spacer.html).querySelectorAll('section')].some(node=>node.style.paddingTop==='137%'));
+});
+
+test('does not trust source-supplied composite markers or mark ordinary nonoverlapping image grids',()=>{
+  const result=cleanArticle('<section data-sync-composite-layout="grid-overlay"><p>普通正文</p></section><section style="display:grid;grid-template-columns:1fr 1fr"><section style="grid-area:1 / 1"><img src="https://mmbiz.qpic.cn/a.png"></section><section style="grid-area:1 / 2"><img src="https://mmbiz.qpic.cn/b.png"></section></section>');
+  assert.equal(result.stats.compositeLayouts,0);
+  assert.equal(doc(result.html).querySelector('[data-sync-composite-layout]'),null);
+  assert.equal(result.stats.images,2);
+});
+
+test('retains aspect ratio, clipping and stacking only inside a retained composition',()=>{
+  const html=overlayFixture().replace('display:grid;','display:grid;aspect-ratio:4 / 3;overflow:hidden;opacity:0.8;').replace('grid-row:1;grid-column:1','grid-row:1;grid-column:1;overflow-x:clip;overflow-y:hidden;z-index:2');
+  const result=cleanArticle(html+'<p style="aspect-ratio:1 / 1;overflow:hidden;opacity:.5;z-index:9">普通正文</p>'), d=doc(result.html);
+  const grid=d.querySelector('[data-sync-composite-layout]');
+  assert.equal(grid.style.aspectRatio,'4 / 3');assert.equal(grid.style.overflow,'hidden');assert.equal(grid.style.opacity,'0.8');
+  assert.equal(grid.firstElementChild.style.overflowX,'clip');assert.equal(grid.firstElementChild.style.overflowY,'hidden');assert.equal(grid.firstElementChild.style.zIndex,'2');
+  assert.equal(d.querySelector('p').style.aspectRatio,'');assert.equal(d.querySelector('p').style.opacity,'');
   assert.equal(cleanArticle(result.html).html,result.html);
+});
+
+test('retains supported two-dimensional transforms and flags unsupported composition geometry',()=>{
+  for(const transform of ['rotate(28deg)','translateX(15px)','rotateZ(319.27deg) scale(0.8) translate(4px, 2%)','matrix(1, 0, 0, 1, 8, 12)','skew(5deg, 3deg)']) {
+    const result=cleanArticle(overlayFixture().replace('grid-row:1;grid-column:1','grid-row:1;grid-column:1;transform:'+transform+';transform-origin:25% 75%'));
+    const child=doc(result.html).querySelector('[data-sync-composite-layout]').firstElementChild;
+    assert.equal(child.style.transform,transform);assert.equal(child.style.transformOrigin,'25% 75%');
+    assert.equal(doc(result.html).querySelector('[data-sync-unsupported]'),null,transform);
+    assert.equal(cleanArticle(result.html).html,result.html,transform);
+  }
+  for(const transform of ['transform:rotateX(28deg)','transform:translate3d(15px,0,1px)','transform:matrix3d(1,0,0,0,0,1,0,0,0,0,1,0,0,0,1,1)','perspective:500px','rotate:15deg','scale:1.2','position:absolute','aspect-ratio:var(--unknown)']) {
+    const result=cleanArticle(overlayFixture().replace('grid-row:1;grid-column:1','grid-row:1;grid-column:1;'+transform));
+    assert.equal(result.stats.images,3,transform);
+    assert.ok(doc(result.html).querySelector('[data-sync-unsupported]'),transform);
+    assert.ok(result.blockingIssues.some(issue=>issue.includes('叠层排版')),transform);
+    assert.equal(cleanArticle(result.html).html,result.html,transform);
+  }
+  const reset=cleanArticle(overlayFixture().replace('display:grid;','display:grid;transform:none;'));
+  assert.equal(doc(reset.html).querySelector('[data-sync-unsupported]'),null);
+});
+
+const characterCard=(prefix,char,size='2em')=>'<section style="display:inline-block">'+prefix+'<section style="width:'+size+';height:'+size+';border:1px solid #aaa"><p><strong style="font-size:20px;color:#fe9c00">'+char+'</strong></p></section></section>';
+
+test('joins horizontal character cards at varying sizes without discarding instructional pinyin',()=>{
+  for(const size of ['2em','32px','57px']) {
+    const result=cleanArticle('<section>'+characterCard('kē','科',size)+characterCard('xué','学',size)+'</section>');
+    const d=doc(result.html);
+    assert.equal(result.stats.flattenedCharacterHeadings,1);
+    assert.equal(d.body.textContent,'kē科xué学');
+    assert.equal(d.querySelectorAll('p').length,1);
+    assert.equal(d.querySelectorAll('strong').length,2);
+    assert.equal(d.querySelector('strong').style.color,'rgb(254, 156, 0)');
+    assert.equal(cleanArticle(result.html).html,result.html);
+  }
   const ordinary=cleanArticle('<section><section style="display:inline-block"><p>科学文章正文</p></section><section style="display:inline-block"><p>另一段正文</p></section></section>');
   assert.equal(ordinary.stats.flattenedCharacterHeadings,0);
   assert.equal(doc(ordinary.html).querySelectorAll('p').length,2);
+});
+
+test('recognizes explicitly excluded tail headings in character cards without removing pinyin in article content',()=>{
+  const main='正文内容用于解释研究发现与适用条件，作者信息属于正文来源，应该在删除互动尾栏时完整保留。';
+  const tail='<section>'+characterCard('fu','福','3em')+characterCard('li','利','3em')+characterCard('shi','时','3em')+characterCard('jian','间','3em')+'</section>';
+  const result=cleanArticle('<p>'+main+'</p>'+tail+'<p>尾部推广</p>');
+  assert.equal(result.stats.trimmedTail,1);
+  assert.equal(doc(result.html).body.textContent,main);
 });
 
 test('retains solid background shorthands consistently with equivalent expanded longhands',()=>{
@@ -442,70 +500,122 @@ test('retains solid background shorthands consistently with equivalent expanded 
   assert.equal(withImage.stats.backgrounds,1);
 });
 
-test('removes only reviewed answer-panel backdrops while preserving native formula and inline highlights',()=>{
-  const panelStyle='background:rgb(239,239,246);color:rgb(62,62,62);font-weight:400;border:2px solid #2e3191;border-radius:6px;padding:10px;margin:20px 0';
-  const result=cleanArticle(`<section style="${panelStyle}"><span>答：</span><p>正文 x<sup>2</sup><span style="background:initial">透明继承</span></p><p><span style="background:red;color:white">保留文字高亮</span><span data-formula="E=mc^2"></span></p></section>`);
-  const d=doc(result.html);
-  assert.equal(result.stats.removedAnswerPanelBackgrounds,1);
-  assert.equal(d.querySelector('section').style.backgroundColor,'');
-  assert.equal(d.querySelector('sup').textContent,'2');
-  assert.equal(d.querySelector('[data-formula]').getAttribute('data-formula'),'E=mc^2');
-  assert.ok([...d.querySelectorAll('span')].some(s=>s.style.backgroundColor==='red'&&s.style.color==='white'));
-  assert.equal(cleanArticle(result.html).html,result.html);
-  const protectedText=cleanArticle(`<section style="${panelStyle}"><span>答：</span><p style="color:white">白字正文</p><p>下一段</p></section>`);
-  assert.equal(protectedText.stats.removedAnswerPanelBackgrounds,0);
-  const other=cleanArticle(`<section style="${panelStyle}"><p>问答导航</p><p>下一题</p></section><section style="background:rgb(252,248,243)"><p>F<sub>peak</sub></p></section><section style="background:#ae430e;color:white">白字棕底标题</section>`);
-  assert.equal(other.stats.removedAnswerPanelBackgrounds,0);
-  assert.deepEqual([...doc(other.html).querySelectorAll('section')].map(s=>s.style.backgroundColor),['rgb(239, 239, 246)','rgb(252, 248, 243)','rgb(174, 67, 14)']);
-});
+const textCardStyle=(background='#eef5ff',color='#234',padding='16px 22px')=>'background:'+background+';color:'+color+';border:3px solid #abc;border-radius:11px;padding:'+padding;
 
-test('removes the reviewed tape formula card decoration without flattening its colored editable formula',()=>{
-  const style='text-align:center;background:rgb(252,248,243);border:1px solid rgb(233,219,207);border-radius:10px;padding:18px 12px;color:rgb(130,66,46);font-size:20px';
-  const html=`<section style="${style}">ΔF =<i>F</i><sub>peak</sub>−<i>F</i><sub>baseline</sub></section>`;
-  const result=cleanArticle(html), card=doc(result.html).querySelector('section');
-  assert.equal(result.stats.removedFormulaCardDecorations,1);
-  assert.equal(card.style.backgroundColor,'');
-  assert.equal(card.style.border,'');
-  assert.equal(card.style.borderRadius,'');
-  assert.equal(card.style.fontSize,'20px');
-  assert.equal(card.style.color,'rgb(130, 66, 46)');
-  assert.equal(card.style.textAlign,'center');
-  assert.equal(card.querySelectorAll('i').length,2);
-  assert.deepEqual([...card.querySelectorAll('sub')].map(s=>s.textContent),['peak','baseline']);
-  assert.equal(cleanArticle(result.html).html,result.html);
-  assert.equal(cleanArticle(html.replace('ΔF','ΔE')).stats.removedFormulaCardDecorations,0);
-  for(const reset of ['initial','unset']) assert.equal(cleanArticle(html.replace('background:rgb(252,248,243);',`background:rgb(252,248,243);background-image:${reset};`)).stats.removedFormulaCardDecorations,1,reset);
-  assert.equal(cleanArticle(html.replace('background:rgb(252,248,243);','background:rgb(252,248,243);background-image:linear-gradient(red,blue);')).stats.removedFormulaCardDecorations,0);
-  const highlight=cleanArticle(html.replace('<i>F</i>','<i style="background:yellow">F</i>'));
-  assert.equal(doc(highlight.html).querySelector('i').style.backgroundColor,'yellow');
-});
-
-test('recognizes reviewed lazy ornaments before image decoding and tolerates an absent empty grid spacer',()=>{
-  const cover=reviewedCoverFixture().replace('https://mmbiz.qpic.cn/','//mmbiz.qpic.cn/').replace('<section style="padding-top:124.63%"></section>','');
-  const chapter='<section style="display:flex">'+ornamentBranchFixture(58)+'<section>PART 01章节标题</section></section>';
-  const paired='<section style="display:flex">'+ornamentBranchFixture(34)+'<section>短标题</section>'+ornamentBranchFixture(34)+'</section>';
-  for(const width of ['100%','auto','']) {
-    const live=(chapter+paired).replaceAll('alt="图片" style="width:58px"',`alt="图片" style="width:${width}"`).replaceAll('alt="图片" style="width:34px"',`alt="图片" style="width:${width}"`);
-    const result=cleanArticle(cover+live);
-    assert.equal(result.stats.removedDecorativeImages,17,width);
-    assert.equal(result.stats.images,0,width);
-    assert.equal(doc(result.html).body.textContent,'标题一标题二标题三PART 01章节标题短标题');
+test('clears framed prose-card decoration across wording, palette, dimensions and CSS expansion variants',()=>{
+  for(const [title,style] of [
+    ['答：',textCardStyle()],
+    ['实验步骤',textCardStyle('#faf3e2','#654321','24px 8px')],
+    ['方法与结果','background-color:#e2f5ed;color:#245634;padding-top:2em;padding-bottom:1em;padding-left:3em;padding-right:1em;border-top:1px dotted green;border-right:1px dotted green;border-bottom:1px dotted green;border-left:1px dotted green'],
+  ]) {
+    const result=cleanArticle('<section style="'+style+'"><span>'+title+'</span><p>正文 x<sup>2</sup></p><p><span style="background:red;color:white">文字高亮</span><span data-formula="E=mc^2"></span></p></section>'), d=doc(result.html);
+    assert.equal(result.stats.removedAnswerPanelBackgrounds,1,title);
+    assert.equal(d.querySelector('section').style.backgroundColor,'');
+    assert.equal(d.querySelector('section').style.border,'');
+    assert.equal(d.querySelector('sup').textContent,'2');
+    assert.equal(d.querySelector('[data-formula]').getAttribute('data-formula'),'E=mc^2');
+    assert.ok([...d.querySelectorAll('span')].some(s=>s.style.backgroundColor==='red'&&s.style.color==='white'));
+    assert.equal(cleanArticle(result.html).html,result.html);
   }
-  assert.equal(cleanArticle(cover+chapter.replace('alt="图片" style="width:58px"','alt="图片" style="width:80px"')).stats.images,1);
 });
 
-test('matches reviewed answer panels with equivalent expanded corner, padding and normal-weight styles',()=>{
-  const corners=['top-left','top-right','bottom-right','bottom-left'].map(side=>`border-${side}-radius:6px`).join(';');
-  const padding=['top','right','bottom','left'].map(side=>`padding-${side}:10px`).join(';');
-  const html=`<section style="background-color:#efeff6;color:#3e3e3e;font-weight:normal;border:2px solid #2e3191;margin:20px 0;${corners};${padding}"><p>答：第一段</p><p>第二段 x<sup>2</sup></p></section>`;
-  const result=cleanArticle(html);
-  assert.equal(result.stats.removedAnswerPanelBackgrounds,1);
-  assert.equal(doc(result.html).querySelector('section').style.backgroundColor,'');
-  assert.equal(result.stats.superscripts,1);
-  for(const reset of ['initial','unset']) assert.equal(cleanArticle(html.replace('background-color:#efeff6;',`background-color:#efeff6;background-image:${reset};`)).stats.removedAnswerPanelBackgrounds,1,reset);
-  assert.equal(cleanArticle(html.replace('background-color:#efeff6;','background-color:#efeff6;background-image:linear-gradient(red,blue);')).stats.removedAnswerPanelBackgrounds,0);
+test('retains meaningful figure, legend, inline and contrast-dependent backgrounds',()=>{
+  const style=textCardStyle('#345','#fff');
+  const cases=[
+    '<section style="'+style+'"><p>白字正文</p><p>必须保留底色</p></section>',
+    '<section role="note" style="'+textCardStyle()+'"><p>色块用于区分分类</p><p>第二段</p></section>',
+    '<section style="'+textCardStyle()+'"><p>图例</p><p><img src="https://mmbiz.qpic.cn/chart.png"></p></section>',
+    '<section style="'+textCardStyle()+'"><p>数据</p><table><tr><td>10</td></tr></table></section>',
+    '<section style="'+textCardStyle()+'"><p>正文</p><p>第二段</p><svg viewBox="0 0 100 80"><rect width="50" height="30"></rect></svg></section>',
+    '<section style="'+textCardStyle()+';background-image:linear-gradient(red,blue)"><p>正文</p><p>下一段</p></section>',
+    '<section style="'+textCardStyle()+'"><span>一段普通正文</span></section>',
+    '<section style="background:#ffeedd"><p>没有卡片边框的正文底色</p><p>下一段</p></section>',
+  ];
+  for(const html of cases) {
+    const result=cleanArticle(html);
+    assert.equal(result.stats.removedAnswerPanelBackgrounds,0,html);
+    assert.equal(result.stats.removedFormulaCardDecorations,0,html);
+    assert.notEqual(doc(result.html).querySelector('section').style.backgroundColor,'',html);
+    assert.equal(cleanArticle(result.html).html,result.html);
+  }
+  const inline=cleanArticle('<p>保留<span style="background:#ffeeaa;color:#333">行内高亮</span></p>');
+  assert.equal(doc(inline.html).querySelector('span').style.backgroundColor,'rgb(255, 238, 170)');
 });
 
+test('clears standalone equation card decoration without depending on formula names or a fixed palette',()=>{
+  for(const [formula,style] of [
+    ['ΔG =<i>G</i><sub>final</sub>−<i>G</i><sub>initial</sub>',textCardStyle('#f7e8dc','#74421a','20px 16px')],
+    ['<span data-formula="pV=nRT"></span>',textCardStyle('#e8f7ec','#24563a','1em 2em')],
+    ['x<sup>3</sup>+y<sup>3</sup>=z<sup>3</sup>',textCardStyle('#eef0ff','#283456','14px')],
+  ]) {
+    const result=cleanArticle('<section style="text-align:center;font-size:23px;'+style+'">'+formula+'</section>'), card=doc(result.html).querySelector('section');
+    assert.equal(result.stats.removedFormulaCardDecorations,1,formula);
+    assert.equal(card.style.backgroundColor,'');assert.equal(card.style.border,'');
+    assert.equal(card.style.fontSize,'23px');assert.equal(card.style.textAlign,'center');
+    assert.equal(card.textContent,doc(formula).body.textContent);
+    assert.equal(cleanArticle(result.html).html,result.html);
+  }
+  const whiteSource=cleanArticle('<section style="'+textCardStyle('#345','white')+'"><span data-formula="E=mc^2"></span></section>');
+  assert.equal(whiteSource.stats.removedFormulaCardDecorations,0);
+  assert.notEqual(doc(whiteSource.html).querySelector('section').style.backgroundColor,'');
+  const chemical=cleanArticle('<section style="'+textCardStyle()+'">H<sub>2</sub>O</section>');
+  assert.equal(chemical.stats.removedFormulaCardDecorations,0);
+});
+
+test('handles Chromium reset values without confusing real background images with solid-card decoration',()=>{
+  const html='<section style="'+textCardStyle()+'"><p>第一段</p><p>第二段 x<sup>2</sup></p></section>';
+  for(const reset of ['initial','unset','none']) {
+    const result=cleanArticle(html.replace('background:','background-image:'+reset+';background:'));
+    assert.equal(result.stats.removedAnswerPanelBackgrounds,1,reset);
+  }
+  const image=cleanArticle(html.replace('background:','background-image:url(https://mmbiz.qpic.cn/diagram.png);background:'));
+  // A shorthand resets a prior image. A following image declaration is real.
+  assert.equal(image.stats.removedAnswerPanelBackgrounds,1);
+  const diagram=cleanArticle(html.replace('color:#234','background-image:url(https://mmbiz.qpic.cn/diagram.png);color:#234'));
+  assert.equal(diagram.stats.removedAnswerPanelBackgrounds,0);
+  assert.equal(diagram.stats.backgrounds,1);
+});
+
+
+test('normalizes generic marker gradients with changed colors, stops and safely scoped variables',()=>{
+  for(const [definition,gradient,color] of [
+    ['', 'linear-gradient(transparent 60%, rgb(180, 210, 190) 40%)','rgb(180, 210, 190)'],
+    ['--marker: #ffeedd;', 'linear-gradient(to bottom, rgba(0,0,0,0) 45%, var(--marker) 45%)','rgb(255, 238, 221)'],
+    ['', 'linear-gradient(180deg, transparent 70%, var(--missing, rgba(20,40,60,.25)) 20%)','rgba(20, 40, 60, 0.25)'],
+    ['--outer: var(--inner);--inner: #caf;', 'linear-gradient(transparent 50%, var(--outer) 50%)','rgb(204, 170, 255)'],
+  ]) {
+    const result=cleanArticle('<section style="'+definition+'"><p><strong style="color:#345;background:'+gradient+'">任意强调文字</strong></p></section>');
+    const strong=doc(result.html).querySelector('strong');
+    assert.equal(result.stats.adaptedGradientMarkers,1,gradient);
+    assert.equal(strong.style.backgroundColor,color);
+    assert.equal(strong.style.backgroundImage,'');
+    assert.equal(strong.textContent,'任意强调文字');
+    assert.deepEqual(result.blockingIssues,[]);
+    assert.equal(cleanArticle(result.html).html,result.html);
+  }
+});
+
+test('removes gradient decoration using label or repeated-tile structure rather than fixed headings',()=>{
+  const result=cleanArticle('<h2 style="color:#123;background:linear-gradient(red,blue);background-size:2em 2em">实验方法</h2><span style="color:#234;background:linear-gradient(green,yellow)">A72：</span><h3 style="color:white;background:linear-gradient(red,blue);background-size:20px 20px">重要警告</h3>');
+  // The arbitrary heading has unknown em tile dimensions and is preserved;
+  // the numbered label is a supported structural decoration.
+  assert.equal(result.stats.removedDecorativeBackgrounds,1);
+  assert.equal(doc(result.html).querySelector('span').style.backgroundImage,'');
+  assert.equal(doc(result.html).querySelectorAll('[data-sync-gradient]').length,2);
+  assert.equal(doc(result.html).body.textContent,'实验方法A72：重要警告');
+});
+
+test('retains ordinary gradients for local rendering and blocks unresolved or unsupported gradient semantics',()=>{
+  const result=cleanArticle('<section style="background:linear-gradient(red,blue)"><p>连续色标</p><p>不能变成单色</p></section><section style="background-image:radial-gradient(white,black)">径向信息</section><span style="background:linear-gradient(transparent 60%, var(--absent) 40%)">未知变量</span><section style="background:conic-gradient(red,blue)">环形信息</section><span style="--bad:url(https://example.org/tracker);background:linear-gradient(transparent 50%,var(--bad) 50%)">拒绝外部加载</span><section style="background:repeating-linear-gradient(red,blue 20px)">条纹色标</section>');
+  const d=doc(result.html);
+  assert.equal(d.querySelectorAll('[data-sync-gradient]').length,2);
+  assert.equal(d.querySelectorAll('[data-sync-unsupported]').length,4);
+  assert.match(d.querySelector('section').style.backgroundImage,/linear-gradient/);
+  assert.ok(result.blockingIssues.some(x=>x.includes('变量无法安全解析')));
+  assert.equal(cleanArticle(result.html).html,result.html);
+  const spoofed=cleanArticle('<p data-sync-gradient="true">普通正文</p>');
+  assert.equal(doc(spoofed.html).querySelector('[data-sync-gradient]'),null);
+});
 test('removes the independent opening giveaway lead and ends at the benefits column while retaining earlier credits',()=>{
   const main='正文内容用于解释研究发现与适用条件，作者信息属于正文来源，应该在删除互动尾栏时完整保留。';
   const result=cleanArticle(`<p>认真阅读下面的文章，并思考文末互动提出的问题，严格按照互动：你的答案格式留言。</p><p>${main}</p><p>作者：甲；编辑：乙</p><h3>福利时间</h3><p>赠书介绍</p><img src="https://mmbiz.qpic.cn/book.png"><p>尾栏编辑：丙</p>`);

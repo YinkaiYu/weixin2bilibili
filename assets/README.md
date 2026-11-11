@@ -1,8 +1,16 @@
-# 标志素材
+# 图标素材
 
-`iop-logo.pdf` 是项目维护者提供的中国科学院物理研究所矢量标志原文件。扩展中的 PNG 图标从此 PDF 直接渲染，只做等比例缩放和透明边距处理，没有重绘、改色或删除标志内容。
+[`logo.png`](logo.png) 是 weixin2bilibili 的透明 PNG 母图。图标以维护者提供的物理娘形象为参考，将蓝发头像、微信气泡和 B站小电视组合成导入标识。
 
-标志及名称的相关权利归原权利人所有，不随本项目代码的开源许可证授权。需要复用标志时，请自行取得相应许可。
+母图使用内置图片生成工具制作，生成与修整提示词保存在 [`logo-prompt.txt`](logo-prompt.txt)。扩展图标由母图等比例缩小，保留透明通道。
+
+设计参考：
+
+- 物理娘：维护者提供的角色插画。
+- 微信气泡：[腾讯官方仓库中的微信标识](https://github.com/Tencent/WeVisOne-VL/blob/main/assets/wechat-logo.png)。
+- B站小电视：[B站官网使用的应用图标](https://i0.hdslb.com/bfs/static/jinkela/long/images/512.png)。
+
+名称、角色与平台标识的权利说明见 [BRANDING.md](../BRANDING.md)。
 
 重建图标：
 

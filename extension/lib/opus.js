@@ -15,11 +15,9 @@ const HTML_HEADING_SIZES = [24, 22, 20, 18, 16, 14];
 // Official CaptionManager and normalizeImageCaption use String.slice(0, 100).
 // Keep longer text as a paragraph instead of allowing native editing to cut it.
 const IMAGE_CAPTION_MAX_LENGTH = 100;
-const ADAPTED_BROWN_TITLE = Symbol('adapted-brown-title');
-const REVIEWED_BROWN_TITLES = new Set([
-  '还买鸭舌呢，外场早变了', '“画地为牢”，这个牢为什么出不去',
-  '弹幕都在劝，怎么又说回去了', '油烟扇走了，旧事还在后台', '所以，下一次开口能做什么',
-]);
+const ADAPTED_HEADING = Symbol('adapted-heading');
+const MIN_TEXT_CONTRAST = 4.5;
+const NATIVE_PAGE_COLOR = [255,255,255,1];
 
 function colorValue(value) {
   const v = String(value || '').trim();
@@ -59,7 +57,7 @@ function stylesFor(el, parent) {
     // ancestor, is meaningful styling and must not be silently discarded.
     style.pageBackground = /^(?:#ffffff|white)$/i.test(style.background) && BLOCK.has(tag) && (!parent.background || parent.pageBackground);
   }
-  if (el[ADAPTED_BROWN_TITLE]) { style.background = ''; style.pageBackground = false; }
+  if (el[ADAPTED_HEADING]) { style.background = ''; style.pageBackground = false; }
   const font = String(css.fontSize || '').match(/^([\d.]+)(px|pt|em|rem|%)$/i);
   if (font) {
     const n = Number(font[1]);
@@ -163,36 +161,193 @@ function questionNavigationLines(el) {
   return {code, lines};
 }
 
-function adaptReviewedBrownTitles(doc) {
-  let count = 0;
-  for (const card of doc.querySelectorAll('section')) {
-    if (card.style.display !== 'inline-block' || colorValue(card.style.backgroundColor) !== '#ae430e' ||
-        !REVIEWED_BROWN_TITLES.has(card.textContent.replace(/\s+/g, '').trim()) ||
-        card.querySelector('img,svg,math,table,a,sup,sub,[data-formula],[data-latex]')) continue;
-    const ancestors = [];
-    for (let parent = card.parentElement; parent; parent = parent.parentElement) ancestors.unshift(parent);
-    const inherited = ancestors.reduce((style, parent) => stylesFor(parent, style), {});
-    const whiteRuns = [];
-    const visit = (node, carry) => {
-      if (node.nodeType === 3) { if (node.textContent.trim()) whiteRuns.push(carry.color === '#ffffff' && carry.bold); return; }
-      if (node.nodeType !== 1) return;
-      const style = stylesFor(node, carry);
-      for (const child of node.childNodes) visit(child, style);
-    };
-    visit(card, inherited);
-    if (!whiteRuns.length || !whiteRuns.every(Boolean)) continue;
-    // Native bg_style:1 is always a half-height marker. The user explicitly
-    // chose editable brown bold text for these five reviewed white-on-brown
-    // labels. Do not extrapolate this adaptation to other text or palettes.
-    card.style.removeProperty('background');
-    card.style.removeProperty('background-color');
-    card.style.color = '#ae430e';
-    card.style.fontWeight = 'bold';
-    card[ADAPTED_BROWN_TITLE] = true;
-    for (const element of card.querySelectorAll('[style]')) if (colorValue(element.style.color) === '#ffffff') element.style.color = '#ae430e';
-    count++;
+function rgbaColor(value) {
+  const text = colorValue(value).toLowerCase();
+  if (text === 'white') return [...NATIVE_PAGE_COLOR];
+  if (text === 'black') return [0,0,0,1];
+  if (text === 'transparent') return [0,0,0,0];
+  const hex = text.match(/^#([\da-f]{2})([\da-f]{2})([\da-f]{2})([\da-f]{2})?$/i);
+  if (hex) return [...hex.slice(1,4).map(v=>parseInt(v,16)),hex[4]?parseInt(hex[4],16)/255:1];
+  const rgb = text.match(/^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)$/);
+  if (rgb) return [...rgb.slice(1,4).map(v=>Math.min(255,Number(v))),rgb[4]===undefined?1:Number(rgb[4])];
+  return null;
+}
+
+function luminance(color) {
+  const channels = color.slice(0,3).map(v=>{const c=v/255;return c<=.04045?c/12.92:((c+.055)/1.055)**2.4;});
+  return channels[0]*.2126+channels[1]*.7152+channels[2]*.0722;
+}
+function composite(foreground,background) { return foreground.slice(0,3).map((v,i)=>v*foreground[3]+background[i]*(1-foreground[3])).concat(1); }
+function contrast(a,b) { const x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05); }
+function sameColor(a,b) { return a && b && a.every((value,index)=>value===b[index]); }
+function visibleText(node) { return (node.textContent||'').replace(/\s+/g,' ').trim(); }
+function paintedBackground(element) {
+  const css=element.style||{},raw=css.backgroundColor||'';
+  const image=Boolean(css.backgroundImage&&!['none','initial','unset'].includes(css.backgroundImage));
+  const color=element.tagName==='MARK'&&!raw?[255,255,0,1]:rgbaColor(raw);
+  const painted=image||Boolean(color?color[3]>0:raw&&!['initial','unset','inherit'].includes(raw));
+  return {painted,image,color};
+}
+function ancestorsOf(element) { const result=[];for(let p=element.parentElement;p;p=p.parentElement)result.unshift(p);return result; }
+function textRuns(element,inherited={}) {
+  const result=[];
+  function visit(node,carry) {
+    if(node.nodeType===3) {if(node.textContent.trim())result.push({element:node.parentElement,style:carry});return;}
+    if(node.nodeType!==1||SKIP.has(node.tagName))return;
+    const style=stylesFor(node,carry);
+    for(const child of node.childNodes)visit(child,style);
   }
-  return count;
+  visit(element,inherited);return result;
+}
+function pageBackdrop(element) {
+  let background=[...NATIVE_PAGE_COLOR];
+  for(const ancestor of ancestorsOf(element)) {
+    const paint=paintedBackground(ancestor);
+    if(paint.image||/var\s*\(/i.test(ancestor.style.background)||ancestor.style.opacity&&Number(ancestor.style.opacity)!==1)return null;
+    if(paint.painted) {if(!paint.color)return null;background=composite(paint.color,background);}
+  }
+  return background;
+}
+
+/** Ancestor paint composited onto the native white page; excludes the element's own paint. */
+export function getCompositePageBackground(element) {
+  const color=pageBackdrop(element);
+  return color?'#'+color.slice(0,3).map(channel=>Math.round(channel).toString(16).padStart(2,'0')).join(''):null;
+}
+
+function editableHeadingColor(element) {
+  const paint=paintedBackground(element);
+  if(!paint.color||paint.color[3]!==1||paint.image)return null;
+  const text=visibleText(element);
+  if(!text||[...text].length>120)return null;
+  const descendants=[element,...element.querySelectorAll('*')];
+  if(descendants.some(el=>UNSUPPORTED.has(el.tagName)||['IMG','A','SUP','SUB','BR','MARK','UL','OL','LI','FIGURE','FIGCAPTION','PRE','CODE','BLOCKQUOTE'].includes(el.tagName)||
+      explicitLatex(el)!==null||el.hasAttribute('data-sync-unsupported')||el.hasAttribute('data-wb-unsupported')||
+      el.style.opacity&&Number(el.style.opacity)!==1||el.style.mixBlendMode&&el.style.mixBlendMode!=='normal'))return null;
+  const semantic=/^H[1-6]$/.test(element.tagName)||[...element.querySelectorAll('h1,h2,h3,h4,h5,h6')].some(el=>visibleText(el)===text);
+  const badge=['inline-block','inline-flex'].includes(element.style.display)||['fit-content','max-content'].includes(element.style.width);
+  if(!semantic&&!badge)return null;
+  // A compact badge is a heading only when it occupies its own text block;
+  // never recolor an emphasized phrase embedded in a body sentence.
+  let line=element.parentElement;
+  while(line&&line.tagName!=='BODY'&&!BLOCK.has(line.tagName))line=line.parentElement;
+  if(!semantic&&line&&line.tagName!=='BODY'&&visibleText(line)!==text)return null;
+  if(!semantic&&line?.tagName==='BODY') {
+    let branch=element;while(branch.parentElement!==line)branch=branch.parentElement;
+    for(const direction of ['previousSibling','nextSibling']) {
+      for(let sibling=branch[direction];sibling;sibling=sibling[direction]) {
+        if(sibling.nodeType===1&&BLOCK.has(sibling.tagName)&&!['inline','inline-block','inline-flex'].includes(sibling.style.display))break;
+        if(visibleText(sibling)||sibling.nodeType===1&&(sibling.matches('img,svg,math')||sibling.querySelector('img,svg,math')))return null;
+      }
+    }
+  }
+  const inherited=ancestorsOf(element).reduce((style,parent)=>stylesFor(parent,style),{}),runs=textRuns(element,inherited);
+  const blocks=new Set(runs.map(run=>{let p=run.element;while(p!==element&&!BLOCK.has(p.tagName))p=p.parentElement;return p;}));
+  if(!runs.length||blocks.size!==1||!runs.every(run=>run.style.bold))return null;
+  const foreground=rgbaColor(runs[0].style.color);
+  if(!foreground||foreground[3]!==1||luminance(foreground)<.5||!runs.every(run=>sameColor(rgbaColor(run.style.color),foreground)))return null;
+  if(descendants.some(el=>{const local=paintedBackground(el);return local.image||local.painted&&!sameColor(local.color,paint.color);}))return null;
+  const page=pageBackdrop(element);
+  if(!page||contrast(foreground,paint.color)<MIN_TEXT_CONTRAST||contrast(paint.color,page)<MIN_TEXT_CONTRAST||contrast(paint.color,NATIVE_PAGE_COLOR)<MIN_TEXT_CONTRAST)return null;
+  return '#'+paint.color.slice(0,3).map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');
+}
+
+function isScriptElement(element) {
+  return ['SUP','SUB'].includes(element.tagName)||['super','sub'].includes(element.style.verticalAlign);
+}
+function precedingScriptBase(element) {
+  // subSup consumes only the immediately preceding word's trailing Latin,
+  // numeric or Greek base. Do not cross paragraph, formula or media boundaries.
+  let node=element;
+  while(node) {
+    if(node.previousSibling) {
+      node=node.previousSibling;
+      while(node.nodeType===1) {
+        if(BLOCK.has(node.tagName)||explicitLatex(node)!==null||isScriptElement(node)||UNSUPPORTED.has(node.tagName)||['IMG','BR'].includes(node.tagName))return null;
+        if(SKIP.has(node.tagName)||!node.lastChild)break;
+        node=node.lastChild;
+      }
+      if(node.nodeType===3)return /[A-Za-z0-9\u0370-\u03ff]+$/u.test(node.textContent)?node.parentElement:null;
+    } else {
+      node=node.parentElement;
+      if(!node||BLOCK.has(node.tagName))return null;
+    }
+  }
+  return null;
+}
+function effectiveBackground(element) {
+  const chain=[...ancestorsOf(element),element];
+  return {style:chain.reduce((style,node)=>stylesFor(node,style),{}),element:chain.filter(node=>paintedBackground(node).painted).at(-1)||null};
+}
+
+/** Read-only plan shared with the local raster layer; DOM references belong to input. */
+export function analyzeNativeTextBackgrounds(input) {
+  const body=input.body||input,headings=[],unsupported=[];
+  for(const element of [body,...body.querySelectorAll('*')]) {
+    if(headings.some(item=>item.element.contains(element)))continue;
+    const color=editableHeadingColor(element);
+    if(color)headings.push({element,color});
+  }
+  const reported=new Set();
+  function report(element,backgroundElement,reason) {
+    if(!reported.has(element)){reported.add(element);unsupported.push({element,backgroundElement,reason});}
+  }
+  function visit(node,carry,backgroundElement) {
+    if(node.nodeType===3) {
+      if(!node.textContent.trim()||!backgroundElement)return;
+      const foreground=rgbaColor(carry.color||'#000000');
+      // Full backgrounds become half-height native markers. Light ink that
+      // relies on the upper half must be rendered locally or reported, while
+      // ordinary dark text/highlights keep their original editable styling.
+      const nativeContrast=foreground&&contrast(composite(foreground,NATIVE_PAGE_COLOR),NATIVE_PAGE_COLOR);
+      if(nativeContrast>=MIN_TEXT_CONTRAST)return;
+      const paint=paintedBackground(backgroundElement);
+      if(paint.color&&sameColor(paint.color,NATIVE_PAGE_COLOR)&&!paint.image)return;
+      // A muted caption on pale paper gains contrast on white; it does not
+      // depend on a dark backdrop. Mid-gray ink on a dark block does depend on
+      // it even though its luminance is below the heading's light-ink cutoff.
+      const under=paint.color&&!paint.image&&pageBackdrop(backgroundElement);
+      if(foreground&&under) {
+        const sourceBackground=composite(paint.color,under);
+        if(contrast(composite(foreground,sourceBackground),sourceBackground)<=nativeContrast)return;
+      }
+      const element=node.parentElement;
+      report(element,backgroundElement,foreground?'full-background-required':'unresolved-text-color');
+      return;
+    }
+    if(node.nodeType!==1||SKIP.has(node.tagName)||headings.some(item=>item.element===node))return;
+    const paint=paintedBackground(node);
+    const style=stylesFor(node,carry);
+    const owner=paint.painted?node:backgroundElement;
+    if(explicitLatex(node)!==null) {
+      if(style.background&&!style.pageBackground)report(node,owner,'formula-background');
+      return;
+    }
+    if(isScriptElement(node)) {
+      if(style.background&&!style.pageBackground)report(node,owner,'formula-background');
+      for(const run of textRuns(node,carry)) {
+        if(run.style.background&&!run.style.pageBackground)report(node,effectiveBackground(run.element).element,'formula-background');
+      }
+      const base=precedingScriptBase(node),baseBackground=base&&effectiveBackground(base);
+      if(baseBackground?.style.background&&!baseBackground.style.pageBackground)report(node,baseBackground.element,'formula-background');
+    }
+    for(const child of node.childNodes)visit(child,style,owner);
+  }
+  const ancestors=ancestorsOf(body);
+  const inherited=ancestors.reduce((style,element)=>stylesFor(element,style),{});
+  const inheritedBackground=ancestors.filter(element=>paintedBackground(element).painted).at(-1)||null;
+  visit(body,inherited,inheritedBackground);
+  return {headings,unsupported};
+}
+
+function applyHeadingAdaptations(headings) {
+  for(const {element,color} of headings) {
+    for(const child of [element,...element.querySelectorAll('*')]) {
+      child.style.removeProperty('background');child.style.removeProperty('background-color');
+      if(child.style.color)child.style.color=color;
+    }
+    element.style.color=color;element.style.fontWeight='bold';element[ADAPTED_HEADING]=true;
+  }
 }
 
 /**
@@ -215,7 +370,10 @@ export function toOpus(html, { images = new Map(), document: owner, sourceLinkVa
   const issue = message => { if (!blockingIssues.includes(message)) blockingIssues.push(message); };
   const warn = message => { if (!warnings.includes(message)) warnings.push(message); };
   const inform = message => { if (!notices.some(item => item.message === message)) notices.push({severity:'info',message}); };
-  if (adaptReviewedBrownTitles(doc)) inform('已将白字棕底装饰标题改为棕色加粗文字，保持原生可编辑。');
+  const backgroundPlan=analyzeNativeTextBackgrounds(doc);
+  applyHeadingAdaptations(backgroundPlan.headings);
+  if(backgroundPlan.headings.length)inform('已将浅色字配深色底的独立标题改为背景色加粗文字，保持原生可编辑。');
+  if(backgroundPlan.unsupported.some(item=>item.reason!=='formula-background'))issue('部分浅色文字依赖完整背景，B 站原生半高底纹无法保持可读；请将这些局部转为图片或调整文字与背景后再导入。');
   const lookupImage = url => images instanceof Map ? images.get(url) : images[url];
   const imageCaptions = new Map(), consumedCaptions = new Set();
 
