@@ -10,6 +10,87 @@ const convert = html => toOpus(html, { document, images });
 const words = result => result.content.paragraphs.flatMap(p => p.text?.nodes || []).filter(n => n.node_type === 1).map(n => n.word);
 const formulas = result => result.content.paragraphs.flatMap(p => p.text?.nodes || []).filter(n => n.node_type === 5).map(n => n.formula.latex_content);
 
+test('adapts only the five user-approved white-on-brown labels into editable brown bold text', () => {
+  const titles=['还买鸭舌呢，外场早变了','“画地为牢”，这个牢为什么出不去','弹幕都在劝，怎么又说回去了','油烟扇走了，旧事还在后台','所以，下一次开口能做什么'];
+  const card=(text,bg='#ae430e',fg='#ffffff')=>`<section style="display:inline-block;background-color:${bg};padding:3px 18px"><p style="font-size:18px;color:${fg}"><strong>${text}</strong></p></section>`;
+  const r=convert('<section style="background:#fffbf2">'+titles.map(title=>card(title)).join('')+'</section>');
+  assert.deepEqual(r.blockingIssues,[]);
+  assert.deepEqual(words(r).map(word=>word.words),titles);
+  for(const word of words(r)) {assert.equal(word.color,'#ae430e');assert.equal(word.style.bold,true);assert.equal(word.font_size,17);assert.equal(word.bg_style,undefined);}
+  assert.deepEqual(r.notices,[{severity:'info',message:'已将白字棕底装饰标题改为棕色加粗文字，保持原生可编辑。'}]);
+  for(const html of [card('其它标题'),card(titles[0],'#123456'),card(titles[0],'#ae430e','#ffcc00')]) {
+    const other=convert(html);
+    assert.equal(other.notices.length,0,'unknown titles and palettes must not be adapted');
+    assert.ok(words(other)[0].bg_style);
+  }
+});
+
+test('retains only marked source links using native link nodes and preserves nested supported styles', () => {
+  const url='https://example.org/original?lang=en#source';
+  const r=convert(`<p style="color:#3e3e3e;font-size:15px">原文链接：<a data-sync-source-link="true" href="${url}">Original <strong>bold <em>italic</em></strong><span style="font-size:13px;text-decoration:underline line-through">small</span></a>。<a href="https://example.org/unrelated">普通外链</a></p>`);
+  assert.deepEqual(r.blockingIssues,[]);
+  const links=r.content.paragraphs.flatMap(p=>p.text?.nodes||[]).filter(n=>n.node_type===4).map(n=>n.link);
+  assert.deepEqual(links.map(link=>link.show_text),['Original ','bold ','italic','small']);
+  assert.ok(links.every(link=>link.link===url&&link.link_type===16&&link.style.font_size===0));
+  assert.equal(links[1].style.bold,true);assert.equal(links[2].style.italic,true);assert.equal(links[2].style.bold,true);
+  assert.equal(links[3].style.font_level,'small');assert.equal(links[3].style.underline,true);assert.equal(links[3].style.strikethrough,true);
+  assert.deepEqual(r.sourceLinks,[url]);
+  assert.ok(r.notices.some(item=>item.severity==='info'&&item.message.includes('原生链接颜色')));
+  assert.ok(words(r).some(word=>word.words.includes('普通外链')));
+});
+
+test('source links reject unsafe URLs and preserve unsupported semantic/color content with copyable URLs', () => {
+  for(const href of ['javascript:alert(1)','https://user:password@example.org/a']) {
+    const r=convert(`<p><a data-sync-source-link="true" href="${href}">出处</a></p>`);
+    assert.ok(r.blockingIssues.some(issue=>issue.includes('地址无效')));assert.deepEqual(r.sourceLinks,[]);
+  }
+  const scripted=convert('<p><a data-sync-source-link="true" href="https://example.org">E=mc<sup>2</sup></a></p>');
+  assert.deepEqual(scripted.blockingIssues,[]);
+  assert.ok(scripted.warnings.some(issue=>issue.includes('上下标')));
+  assert.equal(formulas(scripted).length,1,'unsupported link must not silently flatten the exponent');
+  assert.deepEqual(scripted.sourceLinks,[]);
+  assert.deepEqual(scripted.requestedSourceLinks,['https://example.org/']);
+  assert.ok(words(scripted).some(word=>word.words.includes('https://example.org/')));
+  const colored=convert('<p><a data-sync-source-link="true" href="https://example.org" style="color:#ff0000">红色原文</a></p>');
+  assert.deepEqual(colored.blockingIssues,[]);
+  assert.ok(colored.warnings.some(issue=>issue.includes('自定义文字颜色')));
+  assert.equal(words(colored)[0].color,'#ff0000');assert.deepEqual(colored.sourceLinks,[]);
+});
+
+test('only validated source URLs become links; rejected, failed and missing results retain copyable complete URLs', () => {
+  const url='https://example.org/original?lang=en#source';
+  const html=`<p>原文：<a data-sync-source-link="true" href="${url}"><strong>来源标题</strong></a></p>`;
+  const accepted=toOpus(html,{document,sourceLinkValidation:{accepted:[url]}});
+  assert.deepEqual(accepted.sourceLinks,[url]);
+  assert.ok(accepted.content.paragraphs[0].text.nodes.some(node=>node.node_type===4));
+  for (const validation of [{rejected:[url]},{failed:[url]},{accepted:[]}]) {
+    const result=toOpus(html,{document,sourceLinkValidation:validation});
+    assert.deepEqual(result.blockingIssues,[]);assert.deepEqual(result.sourceLinks,[]);assert.deepEqual(result.requestedSourceLinks,[url]);
+    assert.ok(result.content.paragraphs.every(p=>p.text?.nodes.every(node=>node.node_type!==4)));
+    const text=words(result).map(word=>word.words).join('');
+    assert.ok(text.includes('来源标题'));assert.equal(text.split(url).length-1,1);assert.ok(result.warnings.some(warning=>warning.includes('完整网址')));
+  }
+  const raw=toOpus(`<p><a data-sync-source-link="true" href="${url}">${url}</a></p>`,{document,sourceLinkValidation:{rejected:[url]}});
+  assert.equal(words(raw).map(word=>word.words).join(''),url,'an already visible source URL is not duplicated');
+});
+
+test('a similar visible URL does not hide the actual source destination during fallback', () => {
+  const url='https://example.org/paper',label=url+'-v2';
+  for(const validation of [{rejected:[url]},{failed:[url]}]){
+    const result=toOpus(`<p>原文链接：<a data-sync-source-link="true" href="${url}">${label}</a></p>`,{document,sourceLinkValidation:validation});
+    assert.equal(words(result).map(word=>word.words).join(''),`原文链接：${label}（${url}）`);
+    assert.deepEqual(result.sourceLinks,[]);
+  }
+});
+
+test('a marked source link inside a figure caption is not consumed as a plain native image comment', () => {
+  const r=convert(`<figure><img src="${image}"><figcaption style="color:#888;font-size:13px">原文：<a href="https://example.org/" data-sync-source-link="true">出处</a></figcaption></figure>`);
+  assert.deepEqual(r.blockingIssues,[]);
+  assert.equal(r.content.paragraphs[0].pic.pics[0].comment,undefined);
+  assert.deepEqual(r.requestedSourceLinks,['https://example.org/']);
+  assert.ok(r.content.paragraphs.flatMap(p=>p.text?.nodes||[]).some(n=>n.node_type===4&&n.link.show_text==='出处'));
+});
+
 test('preserves nested decorations and exact color, using a native heading for uniform 20px text', () => {
   const r = convert('<section style="color:rgb(208, 18, 46);font-size:20px"><p><strong>粗体<em>斜体</em></strong><u>下划线</u><span style="color:#123456;font-weight:normal">正常</span></p></section>');
   assert.deepEqual(r.blockingIssues, []);

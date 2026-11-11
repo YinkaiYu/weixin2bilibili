@@ -3,8 +3,8 @@ import {createBilibiliClient,buildDraftPayload,verifyDraft,draftEditorUrl} from 
 import {allowedImageUrl} from './media.js';
 import {blobToBase64,base64ToBytes,MAX_BRIDGE_IMAGE_BYTES} from './bridge.js';
 
-const METHODS=new Set(['getLoginInfo','listCollections','uploadImage','saveDraft']);
-const SAVED_FIELDS=new Set(['title','content','coverUrl','collectionId','original','draftId','summary']);
+const METHODS=new Set(['getLoginInfo','listCollections','validateSourceLinks','uploadImage','saveDraft']);
+const SAVED_FIELDS=new Set(['title','content','sourceLinks','coverUrl','collectionId','original','draftId','summary']);
 
 export function isTrustedNativeSender(sender,extensionId){
   if(!extensionId||sender?.id!==extensionId||!Number.isInteger(sender.tab?.id)||sender.frameId!==0)return false;
@@ -91,6 +91,7 @@ export function createBackgroundHandler({client,fetchImpl=globalThis.fetch?.bind
       let data;
       if(message.method==='getLoginInfo')data=await client.getLoginInfo();
       else if(message.method==='listCollections')data=await client.listCollections();
+      else if(message.method==='validateSourceLinks')data=await client.validateSourceLinks(payload.urls);
       else if(message.method==='uploadImage'){
         const bytes=base64ToBytes(payload.base64);
         const blob=new Blob([bytes],{type:typeof payload.mime==='string'?payload.mime:'application/octet-stream'});

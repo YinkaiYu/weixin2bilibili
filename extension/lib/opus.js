@@ -3,6 +3,7 @@
  * the public read-editor bundle on 2026-11-11; see docs/native-schema.md.
  * This module never downloads content, uploads, or publishes anything.
  */
+import {normalizeSourceLink} from './source-links.js';
 
 const BLOCK = new Set(['P', 'DIV', 'SECTION', 'ARTICLE', 'MAIN', 'HEADER', 'FOOTER', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'FIGURE', 'FIGCAPTION', 'UL', 'OL', 'LI', 'PRE', 'HR']);
 const UNSUPPORTED = new Set(['SVG', 'MATH', 'TABLE', 'VIDEO', 'AUDIO', 'IFRAME', 'CANVAS', 'OBJECT', 'EMBED']);
@@ -14,6 +15,11 @@ const HTML_HEADING_SIZES = [24, 22, 20, 18, 16, 14];
 // Official CaptionManager and normalizeImageCaption use String.slice(0, 100).
 // Keep longer text as a paragraph instead of allowing native editing to cut it.
 const IMAGE_CAPTION_MAX_LENGTH = 100;
+const ADAPTED_BROWN_TITLE = Symbol('adapted-brown-title');
+const REVIEWED_BROWN_TITLES = new Set([
+  '还买鸭舌呢，外场早变了', '“画地为牢”，这个牢为什么出不去',
+  '弹幕都在劝，怎么又说回去了', '油烟扇走了，旧事还在后台', '所以，下一次开口能做什么',
+]);
 
 function colorValue(value) {
   const v = String(value || '').trim();
@@ -53,6 +59,7 @@ function stylesFor(el, parent) {
     // ancestor, is meaningful styling and must not be silently discarded.
     style.pageBackground = /^(?:#ffffff|white)$/i.test(style.background) && BLOCK.has(tag) && (!parent.background || parent.pageBackground);
   }
+  if (el[ADAPTED_BROWN_TITLE]) { style.background = ''; style.pageBackground = false; }
   const font = String(css.fontSize || '').match(/^([\d.]+)(px|pt|em|rem|%)$/i);
   if (font) {
     const n = Number(font[1]);
@@ -156,16 +163,50 @@ function questionNavigationLines(el) {
   return {code, lines};
 }
 
+function adaptReviewedBrownTitles(doc) {
+  let count = 0;
+  for (const card of doc.querySelectorAll('section')) {
+    if (card.style.display !== 'inline-block' || colorValue(card.style.backgroundColor) !== '#ae430e' ||
+        !REVIEWED_BROWN_TITLES.has(card.textContent.replace(/\s+/g, '').trim()) ||
+        card.querySelector('img,svg,math,table,a,sup,sub,[data-formula],[data-latex]')) continue;
+    const ancestors = [];
+    for (let parent = card.parentElement; parent; parent = parent.parentElement) ancestors.unshift(parent);
+    const inherited = ancestors.reduce((style, parent) => stylesFor(parent, style), {});
+    const whiteRuns = [];
+    const visit = (node, carry) => {
+      if (node.nodeType === 3) { if (node.textContent.trim()) whiteRuns.push(carry.color === '#ffffff' && carry.bold); return; }
+      if (node.nodeType !== 1) return;
+      const style = stylesFor(node, carry);
+      for (const child of node.childNodes) visit(child, style);
+    };
+    visit(card, inherited);
+    if (!whiteRuns.length || !whiteRuns.every(Boolean)) continue;
+    // Native bg_style:1 is always a half-height marker. The user explicitly
+    // chose editable brown bold text for these five reviewed white-on-brown
+    // labels. Do not extrapolate this adaptation to other text or palettes.
+    card.style.removeProperty('background');
+    card.style.removeProperty('background-color');
+    card.style.color = '#ae430e';
+    card.style.fontWeight = 'bold';
+    card[ADAPTED_BROWN_TITLE] = true;
+    for (const element of card.querySelectorAll('[style]')) if (colorValue(element.style.color) === '#ffffff') element.style.color = '#ae430e';
+    count++;
+  }
+  return count;
+}
+
 /**
  * @param {string} html Cleaned HTML with uploaded Bilibili image URLs.
- * @param {{images?: Map<string, object>|object, document?: Document}} options
+ * @param {{images?: Map<string, object>|object, document?: Document, sourceLinkValidation?: {accepted?:string[],rejected?:string[],failed?:string[]}}} options
  * @returns {{content: {paragraphs: object[]}, warnings: string[], blockingIssues: string[], stats: object, summary: string}}
  */
-export function toOpus(html, { images = new Map(), document: owner } = {}) {
+export function toOpus(html, { images = new Map(), document: owner, sourceLinkValidation } = {}) {
   const Parser = owner?.defaultView?.DOMParser || globalThis.DOMParser;
   if (!Parser) throw new Error('需要浏览器 DOMParser 才能转换文章。');
   const doc = new Parser().parseFromString(String(html || ''), 'text/html');
-  const paragraphs = [], warnings = [], blockingIssues = [];
+  const paragraphs = [], warnings = [], blockingIssues = [], notices = [], sourceLinks = new Set(), requestedSourceLinks = new Set();
+  const acceptedSourceLinks = new Set((sourceLinkValidation?.accepted || []).map(normalizeSourceLink).filter(Boolean));
+  const rejectedSourceLinks = new Set((sourceLinkValidation?.rejected || []).map(normalizeSourceLink).filter(Boolean));
   const stats = { paragraphs: 0, images: 0, formulaImages: 0, formulas: 0, superscripts: 0, subscripts: 0, characters: 0 };
   const summaryParts = [];
   let listCounter = 0;
@@ -173,6 +214,8 @@ export function toOpus(html, { images = new Map(), document: owner } = {}) {
   let adaptedHeadings = false;
   const issue = message => { if (!blockingIssues.includes(message)) blockingIssues.push(message); };
   const warn = message => { if (!warnings.includes(message)) warnings.push(message); };
+  const inform = message => { if (!notices.some(item => item.message === message)) notices.push({severity:'info',message}); };
+  if (adaptReviewedBrownTitles(doc)) inform('已将白字棕底装饰标题改为棕色加粗文字，保持原生可编辑。');
   const lookupImage = url => images instanceof Map ? images.get(url) : images[url];
   const imageCaptions = new Map(), consumedCaptions = new Set();
 
@@ -218,6 +261,7 @@ export function toOpus(html, { images = new Map(), document: owner } = {}) {
     const descendants = [caption, ...caption.querySelectorAll('*')];
     const complex = descendants.some(el => explicitLatex(el) !== null || UNSUPPORTED.has(el.tagName) ||
       ['IMG', 'SUP', 'SUB'].includes(el.tagName) || ['super', 'sub'].includes(el.style.verticalAlign) ||
+      (el.tagName === 'A' && el.getAttribute('data-sync-source-link') === 'true') ||
       el.hasAttribute('data-wb-unsupported') || el.hasAttribute('data-sync-unsupported'));
     if (complex || text.length > IMAGE_CAPTION_MAX_LENGTH) {
       imageCaptions.set(pictures[0], null);
@@ -364,6 +408,64 @@ export function toOpus(html, { images = new Map(), document: owner } = {}) {
     const hasVisibleText = visibleText(container).trim().length > 0;
     const hasBlockChildren = Array.from(container.children || []).some(c => BLOCK.has(c.tagName));
 
+    function sourceLink(node, inheritedStyle) {
+      const url = normalizeSourceLink(node.getAttribute('href'));
+      if (!url) { issue('原文链接地址无效，已停止同步。'); return false; }
+      requestedSourceLinks.add(url);
+      if (sourceLinkValidation !== undefined && !acceptedSourceLinks.has(url)) {
+        warn(rejectedSourceLinks.has(url) ? 'B 站不支持此原文链接，已保留原文标题和完整网址，可复制访问。' : '尚未确认 B 站是否支持此原文链接，已保留原文标题和完整网址，可复制访问。');
+        return false;
+      }
+      const descendants = [node, ...node.querySelectorAll('*')];
+      if (descendants.some(el => explicitLatex(el) !== null || UNSUPPORTED.has(el.tagName) || BLOCK.has(el.tagName) ||
+          ['IMG','SUP','SUB','BR'].includes(el.tagName) || ['super','sub'].includes(el.style.verticalAlign) ||
+          el.hasAttribute('data-sync-unsupported') || el.hasAttribute('data-wb-unsupported'))) {
+        warn('原文链接包含公式、上下标或复杂内容，已保留原文内容和完整网址，避免原生链接丢失含义。');
+        return false;
+      }
+      const runs = [];
+      const visit = (child, carry) => {
+        if (child.nodeType === 3) {
+          const text = child.textContent.replace(/[\t\r\n]+/g, ' ');
+          if (text) runs.push({text,style:carry});
+        } else if (child.nodeType === 1) {
+          const style = stylesFor(child, carry);
+          for (const nested of child.childNodes) visit(nested, style);
+        }
+      };
+      for (const child of node.childNodes) visit(child, inheritedStyle);
+      // The native link mark has no foreground color field. Ordinary body gray
+      // can adopt the platform link color, explicitly reported as an info notice;
+      // custom colors retain their source expression plus the copyable URL.
+      const ordinaryColor = value => {
+        if (!value || ['black','gray','grey','dimgray','dimgrey'].includes(value.toLowerCase())) return true;
+        const hex = value.match(/^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i);
+        const rgba = value.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?\s*\)$/i);
+        const c = hex ? hex.slice(1).map(v=>parseInt(v,16)) : rgba ? rgba.slice(1,4).map(Number) : null;
+        return c && c[0] === c[1] && c[1] === c[2] && c[0] <= 190 && (rgba?.[4] === undefined || Number(rgba[4]) >= .7);
+      };
+      if (runs.some(run => run.text.trim() && !ordinaryColor(run.style.color))) {
+        warn('原文链接含自定义文字颜色，已保留原文字颜色和完整网址，避免被 B 站链接色替换。');
+        return false;
+      }
+      if (!runs.some(run=>run.text.trim())) { issue('原文链接缺少可见文字，已停止同步。'); return false; }
+      for (const {text,style} of runs) {
+        const size = style.size || 17, small = size < 15;
+        if (size !== (small ? 13 : 17)) adjustedSizes.add(`${size}→${small ? 13 : 17}`);
+        const link = {show_text:text,link:url,icon:'',icon_suffix:'',link_type:16,biz_id:'',pics:[],style:{
+          ...Object.fromEntries(['bold','italic','strikethrough','underline'].map(key=>[key,!!style[key]])),font_size:0,font_level:small?'small':'regular',
+        }};
+        if (style.background && !style.pageBackground) link.bg_style = {style:1,color:nativeColor(style.background)};
+        const previous = nodes.at(-1);
+        if (previous?.node_type === 4 && JSON.stringify({...previous.link,show_text:''}) === JSON.stringify({...link,show_text:''})) previous.link.show_text += text;
+        else nodes.push({node_type:4,link});
+        summaryParts.push(text); stats.characters += text.length;
+      }
+      sourceLinks.add(url);
+      inform('原文链接已使用 B 站原生链接颜色。');
+      return true;
+    }
+
     function inline(node, parentStyle) {
       if (node.nodeType === 3) {
         const text = node.textContent.replace(/[\t\r\n]+/g, ' ');
@@ -385,6 +487,14 @@ export function toOpus(html, { images = new Map(), document: owner } = {}) {
       }
       const childStyle = stylesFor(node, parentStyle);
       if (childStyle.align === 'justify') warn('B 站原生段落没有已验证的两端对齐值，将使用默认对齐；文字内容保留。');
+      if (node.tagName === 'A' && node.getAttribute('data-sync-source-link') === 'true') {
+        if (!sourceLink(node, childStyle)) {
+          for (const child of node.childNodes) inline(child, childStyle);
+          const url = normalizeSourceLink(node.getAttribute('href'));
+          if (url && normalizeSourceLink(node.textContent.trim()) !== url) inline(doc.createTextNode(`（${url}）`), childStyle);
+        }
+        return;
+      }
       const latex = explicitLatex(node);
       if (latex !== null) {
         if (!latex.trim()) { issue('公式标记缺少 LaTeX 内容，不能自动同步。'); return; }
@@ -476,7 +586,7 @@ export function toOpus(html, { images = new Map(), document: owner } = {}) {
   }
   stats.paragraphs = paragraphs.length;
   if (!paragraphs.length) issue('正文没有可同步的内容。');
-  return { content: { paragraphs }, warnings, blockingIssues, stats, summary: summaryParts.join('').replace(/\s+/g, ' ').trim().slice(0, 250) };
+  return { content: { paragraphs }, warnings, notices, sourceLinks:[...sourceLinks], requestedSourceLinks:[...requestedSourceLinks], blockingIssues, stats, summary: summaryParts.join('').replace(/\s+/g, ' ').trim().slice(0, 250) };
 }
 
 export { nativeImageUrl, explicitLatex };

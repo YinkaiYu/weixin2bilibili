@@ -1,6 +1,7 @@
 /** Article extraction and loss-aware cleanup. No requests or page scripts are executed. */
 import {scriptAlbumTitles} from './source-metadata.js';
-const HTML_TAGS = new Set('p div section article main header footer figure figcaption span strong b em i u s strike del sup sub br hr img h1 h2 h3 h4 h5 h6 ul ol li blockquote pre code table thead tbody tfoot tr td th caption colgroup col'.split(' '));
+import {normalizeSourceLink} from './source-links.js';
+const HTML_TAGS = new Set('p div section article main header footer figure figcaption span a strong b em i u s strike del sup sub br hr img h1 h2 h3 h4 h5 h6 ul ol li blockquote pre code table thead tbody tfoot tr td th caption colgroup col'.split(' '));
 const SVG_TAGS = new Set('svg g path rect circle ellipse line polyline polygon text tspan defs clippath mask lineargradient radialgradient stop title desc'.split(' '));
 const MATH_TAGS = new Set('math mrow mi mn mo mtext mspace ms mfrac msqrt mroot msub msup msubsup munder mover munderover mtable mtr mtd mfenced menclose semantics annotation'.split(' '));
 const UNSUPPORTED_MEDIA = new Set('iframe video audio canvas object embed mpvoice qqmusic mp-common-videosnap mp-common-mpaudio mp-common-profile mp-common-product'.split(' '));
@@ -350,7 +351,7 @@ function captionCandidate(node) {
   const text=String(node.textContent||'').trim();
   if (!text || normalizedText(text).length>300 || /^(?:by\s|作者\s*[:：]|译者\s*[:：]|编辑\s*[:：]|校对\s*[:：]|审核\s*[:：]|参考文献|参考资料|免责声明|版权声明)/i.test(text)) return false;
   if (node.nodeType===1) {
-    const forbidden='img,svg,math,table,figure,figcaption,h1,h2,h3,h4,h5,h6,pre,code,blockquote,ul,ol,li,hr,[data-formula],[data-latex],[data-sync-unsupported]';
+    const forbidden='img,svg,math,table,figure,figcaption,h1,h2,h3,h4,h5,h6,pre,code,blockquote,ul,ol,li,hr,[data-formula],[data-latex],[data-sync-unsupported],a[data-sync-source-link]';
     if(node.matches(forbidden)||node.querySelector(forbidden)) return false;
   }
   return captionTextNodes(node).every(textNode=>{
@@ -459,6 +460,35 @@ function safeUrl(raw, base = '', { image = false } = {}) {
     const url = new URL(value, base || undefined);
     return ['https:', 'http:'].includes(url.protocol) ? url.href : '';
   } catch { return ''; }
+}
+
+function safeSourceHref(raw) {
+  const value=String(raw||'').trim();
+  return normalizeSourceLink(value.startsWith('//')?`https:${value}`:value);
+}
+
+function originalSourceHref(anchor) {
+  const href=safeSourceHref(anchor.getAttribute('href'));
+  if(!href || !normalizedText(anchor.textContent)) return '';
+  const paragraph=anchor.closest('p,section,div');
+  if(!paragraph || paragraph.closest('pre,code') || paragraph.querySelector('img,svg,math,table') || paragraph.querySelectorAll('a').length!==1 || normalizedText(paragraph.textContent).length>500) return '';
+  // A source citation is one paragraph: the exact source label, one anchor and
+  // optional final punctuation. An incoming marker alone grants no exception.
+  if([...paragraph.querySelectorAll('p,section,div,h1,h2,h3,h4,h5,h6,li,blockquote')].length) return '';
+  const before=anchor.ownerDocument.createRange(), after=anchor.ownerDocument.createRange();
+  before.selectNodeContents(paragraph);before.setEndBefore(anchor);
+  after.selectNodeContents(paragraph);after.setStartAfter(anchor);
+  if(!/^原文链接[:：]$/.test(normalizedText(before.toString())) || !/^[。.!！]?$/.test(normalizedText(after.toString()))) return '';
+  return href;
+}
+
+function removeComponentHints(body) {
+  let removed=0;
+  for(const node of [...body.querySelectorAll('p,section,div')]) {
+    if(!body.contains(node) || node.closest('pre,code') || normalizedText(node.textContent)!=='左右滑动查看更多' || containsTemplateMedia(node,'img,svg,math,table,[data-formula],[data-latex]')) continue;
+    node.remove();removed++;
+  }
+  return removed;
 }
 
 function localAssetPath(raw) {
@@ -600,6 +630,7 @@ function summarize(body) {
     superscripts: body.querySelectorAll('sup').length,
     subscripts: body.querySelectorAll('sub').length,
     captions: body.querySelectorAll('figure > figcaption').length,
+    sourceLinks:body.querySelectorAll('a[data-sync-source-link="true"][href]').length,
   };
 }
 
@@ -626,6 +657,7 @@ export function cleanArticle(html, options = {}) {
   const stats = { removedLinks: 0, removedEmptyBlocks: 0, removedImagePlaceholders: 0, removedEmptySvg: 0, removedTransparentBackgrounds: 0, removedDecorativeBackgrounds: 0, removedSmallDecorations: 0, removedHiddenElements: removeHiddenContent(body) };
   stats.removedStanceStatements=removeStanceStatements(body);
   stats.removedOpeningLeads=removeOpeningInteractionLead(body);
+  stats.removedComponentHints=removeComponentHints(body);
   stats.flattenedCharacterHeadings=flattenCharacterCardHeadings(body);
   stats.trimmedTail=trimTail(body)?1:0;
   const removedDecorativeImages=cleanReviewedTemplate(body,imageIndices);
@@ -638,6 +670,7 @@ export function cleanArticle(html, options = {}) {
   if(stats.removedFormulaCardDecorations) warnings.push('已略去已确认公式卡片的装饰底色和边框，保留公式文字、颜色和上下标。');
   if(stats.removedStanceStatements) warnings.push('已清除独立的立场声明，保留作者、编辑和参考资料。');
   if(stats.removedOpeningLeads) warnings.push('已清除开头的微信互动赠书引导。');
+  if(stats.removedComponentHints) warnings.push('已清除微信组件的滑动提示。');
   if (stats.trimmedTail) warnings.push('已删除回顾、福利互动或投票等尾部栏目及其后面的内容。');
 
   for (let element of [...body.querySelectorAll('*')]) {
@@ -655,18 +688,24 @@ export function cleanArticle(html, options = {}) {
       continue;
     }
     if (tag === 'a') {
-      stats.removedLinks++;
-      const retained = ['style','title','dir','lang','data-formula','data-latex'].filter(name=>element.hasAttribute(name));
-      if (!retained.length) {
-        element.replaceWith(...element.childNodes);
-        continue;
+      const sourceHref=originalSourceHref(element);
+      if(sourceHref) {
+        element.setAttribute('href',sourceHref);
+        element.setAttribute('data-sync-source-link','true');
+      } else {
+        stats.removedLinks++;
+        const retained = ['style','title','dir','lang','data-formula','data-latex'].filter(name=>element.hasAttribute(name));
+        if (!retained.length) {
+          element.replaceWith(...element.childNodes);
+          continue;
+        }
+        const span = document.createElement('span');
+        for (const name of retained) span.setAttribute(name,element.getAttribute(name));
+        span.append(...element.childNodes);
+        element.replaceWith(span);
+        element = span;
+        tag = 'span';
       }
-      const span = document.createElement('span');
-      for (const name of retained) span.setAttribute(name,element.getAttribute(name));
-      span.append(...element.childNodes);
-      element.replaceWith(span);
-      element = span;
-      tag = 'span';
     }
     if (!HTML_TAGS.has(tag) && !SVG_TAGS.has(tag) && !MATH_TAGS.has(tag)) {
       element.replaceWith(...element.childNodes);
@@ -712,13 +751,14 @@ export function cleanArticle(html, options = {}) {
       const key = attribute.name.toLowerCase();
       let keep = key === 'style' || key === 'title' || key === 'dir' || key === 'lang';
       if (tag === 'img' && IMAGE_ATTRS.has(key)) keep = true;
+      if (tag === 'a' && ['href','data-sync-source-link'].includes(key)) keep = true;
       if (SVG_TAGS.has(tag) && SVG_ATTRS.has(key)) keep = true;
       if (MATH_TAGS.has(tag) && MATH_ATTRS.has(key)) keep = true;
       if (['td', 'th'].includes(tag) && ['colspan', 'rowspan'].includes(key)) keep = true;
       if (tag === 'ol' && key === 'start') keep = true;
       if (key === 'data-sync-unsupported') keep = true;
       if (['data-formula', 'data-latex', 'data-sync-background-url'].includes(key)) keep = true;
-      if (key.startsWith('on') || /javascript:|expression\s*\(/i.test(attribute.value) && key !== 'src' || /url\s*\(/i.test(attribute.value) && !['src','style'].includes(key)) keep = false;
+      if (key.startsWith('on') || /javascript:|expression\s*\(/i.test(attribute.value) && !['src','href'].includes(key) || /url\s*\(/i.test(attribute.value) && !['src','style','href'].includes(key)) keep = false;
       if (!keep) element.removeAttribute(attribute.name);
     }
   }
@@ -728,7 +768,7 @@ export function cleanArticle(html, options = {}) {
   while (walker.nextNode()) textNodes.push(walker.currentNode);
   for (const node of textNodes) {
     if (node.parentElement?.closest('svg, math')) continue;
-    node.textContent = node.textContent.replace(/(?:https?:\/\/|www\.)[^\s<>"“”‘’\u3000]+/gi, match => {
+    if(!node.parentElement?.closest('a[data-sync-source-link="true"][href]')) node.textContent = node.textContent.replace(/(?:https?:\/\/|www\.)[^\s<>"“”‘’\u3000]+/gi, match => {
       stats.removedLinks++;
       const trailing = match.match(/[，。！？、；：）】》」』,.!?;:]+$/)?.[0] || '';
       return trailing;

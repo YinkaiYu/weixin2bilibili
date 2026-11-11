@@ -58,6 +58,7 @@ export function createBridgeClient({sendMessage,jobKey=''}={}){
   return {
     getLoginInfo:()=>call('getLoginInfo'),
     listCollections:()=>call('listCollections'),
+    validateSourceLinks:urls=>call('validateSourceLinks',{urls}),
     async uploadImage(blob,{filename='image'}={}){
       return call('uploadImage',{base64:await blobToBase64(blob),mime:blob.type,filename});
     },

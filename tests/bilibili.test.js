@@ -47,6 +47,83 @@ test('refuses missing image metadata and unresolved external images', () => {
   assert.throws(() => buildDraftPayload(bad), /尺寸/);
 });
 
+const sourceUrl='https://example.org/research/paper?edition=2#results';
+const sourceNode=()=>({node_type:4,link:{show_text:'原文标题',link:sourceUrl,link_type:16,icon:'',icon_suffix:'',biz_id:'',pics:[],style:{bold:true,italic:false,underline:true,strikethrough:false,font_size:0,font_level:'small'}}});
+function sourceOptions(){const value=clone(options);value.content.paragraphs[0].text.nodes.push(sourceNode());value.sourceLinks=[sourceUrl];return value;}
+
+test('allows only explicitly confirmed HTTP source links and omits the allowlist from the API body',()=>{
+  const input=sourceOptions(),payload=buildDraftPayload(input);
+  assert.deepEqual(payload.arg.opus.content.paragraphs[0].text.nodes.at(-1),sourceNode());
+  assert.equal(JSON.stringify(payload).includes('sourceLinks'),false);
+  for(const mutate of [
+    value=>delete value.sourceLinks,
+    value=>value.sourceLinks=['https://example.org/other'],
+    value=>value.sourceLinks='https://example.org/',
+    value=>value.sourceLinks=['javascript:alert(1)'],
+    value=>value.content.paragraphs[0].text.nodes.at(-1).link.link='javascript:alert(1)',
+    value=>value.content.paragraphs[0].text.nodes.at(-1).link.link='https://u:p@example.org/paper',
+    value=>value.content.paragraphs[0].text.nodes.at(-1).link.link_type=13,
+    value=>value.content.paragraphs[0].text.nodes.at(-1).node_type=3,
+    value=>value.content.paragraphs[0].text.nodes.at(-1).link.show_text='',
+    value=>value.content.paragraphs[0].text.nodes.at(-1).link.show_text={words:'原文标题'},
+    value=>value.content.paragraphs.push({para_type:7,link_card:{card:sourceNode().link}}),
+  ]){const bad=sourceOptions();mutate(bad);assert.throws(()=>buildDraftPayload(bad),/链接/);}
+});
+
+test('source link readback checks URL, display text and supported styles and reports plain-text downgrade',()=>{
+  const payload=buildDraftPayload(sourceOptions()),good=makeDraft(payload);
+  assert.equal(verifyDraft(payload,good).ok,true);
+  const defaults=clone(good),link=defaults.opus.content.paragraphs[0].text.nodes.at(-1).link;
+  delete link.icon;delete link.icon_suffix;delete link.biz_id;delete link.pics;delete link.style.italic;delete link.style.strikethrough;delete link.style.font_size;
+  assert.equal(verifyDraft(payload,defaults).ok,true,'official empty and false fields have the same rendered meaning');
+  for(const mutate of [
+    node=>node.link.link='https://example.org/another',
+    node=>node.link.link=sourceUrl.replace('edition=2','edition=3'),
+    node=>node.link.show_text='改写的标题',
+    node=>node.link.style.bold=false,
+    node=>node.link.style.font_level='regular',
+    node=>node.link.style.underline=false,
+    node=>node.link.bg_style={style:1,color:{color:'#ffff00'}},
+    node=>node.link.link_type=41,
+    node=>{node.node_type=1;node.word={words:node.link.show_text};delete node.link;},
+  ]){
+    const actual=clone(good);mutate(actual.opus.content.paragraphs[0].text.nodes.at(-1));
+    const result=verifyDraft(payload,actual);
+    assert.equal(result.ok,false);
+    assert.ok(result.issues.some(issue=>issue.includes('原文出处链接')));
+  }
+});
+
+test('source link validation uses the official parse endpoint and accepts only generic recognized URLs',async()=>{
+  const urls=['https://example.org/accepted','https://example.org/rejected','https://example.org/card','https://example.org/missing'];
+  const calls=[],client=createBilibiliClient({getCookie:async()=> 'test-token',fetchImpl:async(url,init)=>{
+    calls.push({url,init});return response({parsed_items:{
+      [urls[0]]:{type:1,link_type:16,link:{url:urls[0]}},
+      [urls[1]]:{type:0,link_type:0,unknown:{reason_text:''}},
+      [urls[2]]:{type:2,link_type:41},
+    }});
+  }});
+  assert.deepEqual(await client.validateSourceLinks([...urls,urls[0]]),{accepted:[urls[0]],rejected:[urls[1]],failed:[urls[2],urls[3]]});
+  assert.equal(calls.length,1);assert.equal(new URL(calls[0].url).pathname,'/x/v2/dynamic/sunflower/parse');
+  assert.equal(calls[0].init.method,'POST');assert.equal(calls[0].init.headers['Content-Type'],'application/json');
+  assert.deepEqual(JSON.parse(calls[0].init.body),{raw_texts:urls});
+  assert.equal(calls[0].init.credentials,'include');
+  assert.equal(new URL(calls[0].url).hostname,'api.bilibili.com','the source website is never requested');
+});
+
+test('source link parser failures never authorize links and invalid inputs make no request',async()=>{
+  const urls=['https://example.org/paper'];
+  for(const fetchImpl of [async()=>{throw new Error('offline');},async()=>new Response('',{status:503}),async()=>response({parsed_items:{}}),async()=>response({parsed_items:{[urls[0]]:{type:'1',link_type:16}}})]){
+    const client=createBilibiliClient({getCookie:async()=> 'test-token',fetchImpl});
+    assert.deepEqual(await client.validateSourceLinks(urls),{accepted:[],rejected:[],failed:urls});
+  }
+  let calls=0;
+  const client=createBilibiliClient({getCookie:async()=> 'test-token',fetchImpl:async()=>{calls++;return response({});}});
+  assert.deepEqual(await client.validateSourceLinks([]),{accepted:[],rejected:[],failed:[]});
+  for(const values of [['javascript:alert(1)'],['https://u:p@example.org/'],['https://example.org/%wrong'],'https://example.org/'])await assert.rejects(client.validateSourceLinks(values),/链接清单/);
+  assert.equal(calls,0);
+});
+
 test('matches only one exact collection name, leaving ambiguity to the user', () => {
   const collections = [{id: 1, name: '正经玩'}, {id: 2, name: '正经玩具'}];
   assert.equal(matchCollection([' 正经玩 '], collections)?.id, 1);

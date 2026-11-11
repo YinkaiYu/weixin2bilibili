@@ -24,10 +24,15 @@ document.querySelector('#run').onclick=async()=>{
         const url=`https://i0.hdslb.com/bfs/mock/image-${index}.png`;
         img.src=url;images.set(url,{width:680,height:320,size:80});
       }
-      const native=toOpus(doc.body.innerHTML,{document,images});
+      // This one source URL was rejected by Bilibili's native link dialog and
+      // parse API. The local test never calls that API or claims other URLs pass.
+      const sourceUrls=[...doc.querySelectorAll('a[data-sync-source-link="true"]')].map(a=>a.href);
+      const rejected=sourceUrls.filter(url=>url==='https://knowablemagazine.org/content/article/health-disease/2026/disease-sniffing-tests-get-closer-to-reality');
+      const native=toOpus(doc.body.innerHTML,{document,images,sourceLinkValidation:{accepted:[],rejected,failed:sourceUrls.filter(url=>!rejected.includes(url))}});
       const pics=native.content.paragraphs.flatMap(p=>p.pic?.pics||[]);
       const text=native.content.paragraphs.filter(p=>p.text).map(p=>p.text.nodes.map(n=>n.word?.words||'').join(''));
-      results.push({name:sample.name,parsed:source.stats,raster:targets.length,native:native.stats,captions:pics.filter(p=>p.comment).length,code:native.content.paragraphs.filter(p=>p.code).length,navigation:text.filter(t=>/^问答导航$|^Q\d+\s/.test(t)),blocking:native.blockingIssues,reviewedStyles:native.blockingIssues.length?reviewedStyles:[]});
+      const brownHeadings=native.content.paragraphs.flatMap(p=>p.text?.nodes||[]).filter(n=>n.word?.color==='#ae430e'&&n.word.style?.bold).map(n=>({text:n.word.words,color:n.word.color,background:n.word.bg_style||null}));
+      results.push({name:sample.name,parsed:source.stats,raster:targets.length,native:native.stats,captions:pics.filter(p=>p.comment).length,code:native.content.paragraphs.filter(p=>p.code).length,navigation:text.filter(t=>/^问答导航$|^Q\d+\s/.test(t)),brownHeadings,sourceUrls,sourceUrlVisible:sourceUrls.every(url=>text.some(t=>t.includes(url))),blocking:native.blockingIssues,reviewedStyles:native.blockingIssues.length?reviewedStyles:[]});
     }
     output.textContent=JSON.stringify(results,null,2);output.dataset.done='true';
   }catch(error){output.textContent=error.message;output.dataset.done='false';}

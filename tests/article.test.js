@@ -547,3 +547,54 @@ test('preserves wrapped semantic line breaks in navigation, code and paragraphs 
   assert.equal(d.querySelectorAll('p').length,1);
   assert.equal(cleanArticle(result.html).html,result.html);
 });
+
+test('preserves only an explicitly labelled original-source link with its text, emphasis and color',()=>{
+  const result=cleanArticle('<p><span>原文链接：</span><a href="https://journal.example/paper?q=1&amp;x=2" target="_blank" onclick="bad()" style="color:#2e3191;font-weight:700"><em>原文标题</em></a></p><p><a href="https://other.example/">普通外链文字</a> https://other.example/naked</p>');
+  const d=doc(result.html), link=d.querySelector('a');
+  assert.equal(result.stats.sourceLinks,1);
+  assert.equal(d.querySelectorAll('a[href]').length,1);
+  assert.equal(link.getAttribute('href'),'https://journal.example/paper?q=1&x=2');
+  assert.equal(link.getAttribute('data-sync-source-link'),'true');
+  assert.equal(link.textContent,'原文标题');
+  assert.equal(link.style.color,'rgb(46, 49, 145)');
+  assert.equal(link.style.fontWeight,'700');
+  assert.ok(link.querySelector('em'));
+  assert.equal(link.hasAttribute('onclick'),false);
+  assert.equal(link.hasAttribute('target'),false);
+  assert.match(d.body.textContent,/普通外链文字/);
+  assert.doesNotMatch(d.body.textContent,/other\.example/);
+  assert.equal(cleanArticle(result.html).html,result.html);
+});
+
+test('source-link markers cannot bypass citation scope or HTTP URL validation',()=>{
+  for(const href of ['javascript:alert(1)','data:text/html,bad','file:///secret','https://user:password@example.test/x','https://exa\nmple.test/x','https://example.test/%G0','/relative','']) {
+    const result=cleanArticle(`<p>原文链接：<a data-sync-source-link="true" href="${href}">来源文字</a></p>`);
+    assert.equal(result.stats.sourceLinks,0,href);
+    assert.equal(doc(result.html).querySelector('a'),null,href);
+    assert.equal(doc(result.html).body.textContent,'原文链接：来源文字');
+  }
+  for(const html of ['<p>正文<a data-sync-source-link="true" href="https://example.test">伪造标记</a></p>','<p>原文链接：<a href="https://example.test">标题</a>；编辑：甲</p>','<p>原文链接：<a href="https://example.test/1">一</a><a href="https://example.test/2">二</a></p>']) assert.equal(cleanArticle(html).stats.sourceLinks,0);
+});
+
+test('retains a bare URL inside the authorised source anchor and does not mistake the citation for an image caption',()=>{
+  const url='https://journal.example/paper';
+  const result=cleanArticle(`<p><img src="https://mmbiz.qpic.cn/a.png"></p><p style="font-size:14px;color:#888">原文链接：<a href="${url}">${url}</a></p>`);
+  const d=doc(result.html);
+  assert.equal(d.querySelector('a').textContent,url);
+  assert.equal(result.stats.sourceLinks,1);
+  assert.equal(result.stats.captions,0);
+  assert.equal(cleanArticle(result.html).html,result.html);
+  assert.equal(cleanArticle('<p>原文链接：<a href="//journal.example/paper">来源</a></p>').stats.sourceLinks,1);
+  assert.equal(doc(cleanArticle('<p>原文链接：https://journal.example/paper</p>').html).body.textContent,'原文链接：');
+  const semantic=doc(cleanArticle('<p>原文链接：<a href="https://journal.example/paper">H<sub>2</sub>O 与 x<sup>2</sup></a></p>').html);
+  assert.ok(semantic.querySelector('a sub'));
+  assert.ok(semantic.querySelector('a sup'));
+});
+
+test('omits only standalone WeChat sliding hints, retaining body mentions and code examples',()=>{
+  const result=cleanArticle('<section><p><span>左右滑动查看更多</span></p></section><p>正文中提到“左右滑动查看更多”的交互设计。</p><pre><code>左右滑动查看更多</code></pre><p>下一段正文</p>');
+  assert.equal(result.stats.removedComponentHints,1);
+  assert.equal(doc(result.html).body.textContent,'正文中提到“左右滑动查看更多”的交互设计。左右滑动查看更多下一段正文');
+  assert.ok(result.warnings.includes('已清除微信组件的滑动提示。'));
+  assert.equal(cleanArticle(result.html).html,result.html);
+});

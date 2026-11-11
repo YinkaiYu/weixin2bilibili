@@ -16,6 +16,7 @@ function fixture({saveImpl,getDraftImpl,fetchImpl}={}){
   const client={
     getLoginInfo:async()=>({isAuthenticated:true,userId:'1001',username:'测试用户'}),
     listCollections:async()=>[{id:42,name:'正经玩'}],
+    validateSourceLinks:async urls=>{calls.push({method:'validateSourceLinks',urls});return {accepted:urls,rejected:[],failed:[]};},
     uploadImage:async(blob,options)=>{calls.push({method:'uploadImage',blob,options});return {url:imageUrl,width:1,height:1,size:.1,animationVerified:true};},
     getDraft:async draftId=>{reads.push(draftId);return getDraftImpl?getDraftImpl(draftId):structuredClone(drafts.get(draftId));},
     saveDraft:async options=>{
@@ -133,6 +134,26 @@ test('functions and caller-controlled endpoint properties never cross the save b
   await bridge.saveDraft({title:'测试',content:{paragraphs:[]},endpoint:'https://evil.test',onSaved:()=>{}});
   assert.equal(transmitted.payload.onSaved,undefined);
   assert.equal(app.calls[0].options.endpoint,undefined);
+});
+
+test('confirmed source-link allowlist survives the bridge and recovery without reaching unrelated fields',async()=>{
+  const app=fixture(),sourceLinks=['https://example.org/paper'];
+  const linked={paragraphs:[{para_type:1,text:{nodes:[{node_type:4,link:{show_text:'原文',link:sourceLinks[0],link_type:16}}]}}]};
+  const result=await app.bridge.saveDraft({title:'原文链接',content:linked,sourceLinks,externalEndpoint:'https://example.org/'});
+  assert.equal(result.verified,true);
+  assert.deepEqual(app.calls[0].options.sourceLinks,sourceLinks);
+  assert.equal(app.calls[0].options.externalEndpoint,undefined);
+  const recovered=await app.bridge.saveDraft({title:'原文链接',content:linked,sourceLinks});
+  assert.equal(recovered.verified,true);assert.equal(recovered.recovered,true);
+  assert.equal(app.calls.length,1,'recovery only reads and checks the existing link');
+});
+
+test('source link validation crosses the trusted bridge only as the named operation',async()=>{
+  const app=fixture(),urls=['https://example.org/paper'];
+  assert.deepEqual(await app.bridge.validateSourceLinks(urls),{accepted:urls,rejected:[],failed:[]});
+  assert.deepEqual(app.calls,[{method:'validateSourceLinks',urls}]);
+  const denied=await app.handler({type:'BILI_API',method:'validateSourceLinks',payload:{urls}},{...sender,id:'other-extension'});
+  assert.equal(denied.ok,false);assert.equal(app.calls.length,1);
 });
 
 test('unknown create result blocks blind retries but permits continuing from a found draft ID',async()=>{

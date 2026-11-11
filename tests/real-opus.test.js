@@ -116,7 +116,24 @@ for (const sample of cases) {
       assert.ok(!nativeText.includes('火箭发射时'),'投票后的上期文章尾部不能导入');
       assert.ok(!nativeText.includes('上期也精彩'));
     }
-    if (sample.name.includes('不抽血')) assert.ok(!nativeText.includes('福利时间'),'福利活动尾部不能导入');
-    if (sample.name.includes('厉娜')) assert.ok(nativeWords.some(word=>word.color==='#ffffff' && word.bg_style?.color?.color==='#ae430e'),'白字标题必须保留祖先棕色底，防止白底白字');
+    if (sample.name.includes('不抽血')) {
+      assert.ok(!nativeText.includes('福利时间'),'福利活动尾部不能导入');
+      const originalUrl='https://knowablemagazine.org/content/article/health-disease/2026/disease-sniffing-tests-get-closer-to-reality';
+      assert.deepEqual(result.requestedSourceLinks,[originalUrl]);
+      const fallback=toOpus(doc.body.innerHTML,{document,images:imageMap,sourceLinkValidation:{rejected:[originalUrl]}});
+      assert.deepEqual(fallback.blockingIssues,[]);assert.deepEqual(fallback.sourceLinks,[]);
+      const fallbackText=fallback.content.paragraphs.flatMap(p=>p.text?.nodes||[]).map(node=>node.word?.words||node.link?.show_text||'').join('');
+      assert.ok(fallbackText.includes('Sniffing out the link between odor and disease'));
+      assert.equal(fallbackText.split(originalUrl).length-1,1,'B站拒绝的真实出处仍保留完整可复制URL且不重复');
+      assert.deepEqual(fallback.content.paragraphs.flatMap(p=>p.pic?.pics||[]),pictures,'链接回退不能改变任何正文图和图注');
+    }
+    if (sample.name.includes('厉娜')) {
+      for (const title of ['还买鸭舌呢，外场早变了','“画地为牢”，这个牢为什么出不去','弹幕都在劝，怎么又说回去了','油烟扇走了，旧事还在后台','所以，下一次开口能做什么']) {
+        const word=nativeWords.find(word=>word.words===title);
+        assert.ok(word, '标题内容保留可编辑文字');
+        assert.equal(word.color,'#ae430e');assert.equal(word.style.bold,true);assert.equal(word.bg_style,undefined,'不得再用半高底纹承载白字');
+      }
+      assert.ok(result.notices.some(item=>item.severity==='info'&&item.message.includes('棕色加粗文字')));
+    }
   });
 }

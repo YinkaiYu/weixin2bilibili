@@ -18,7 +18,7 @@ function setup({collections=[{id:42,name:'正经玩',total:1},{id:84,name:'其�
   globalThis.document=dom.window.document;globalThis.DOMParser=dom.window.DOMParser;
   globalThis.createImageBitmap=async()=>({width:1,height:1,close(){}});
   const state={},messages=[],apiCalls=[],uploads=[],savedPayloads=[],drafts=new Map();
-  const switches={failReadback:false,failUpload:false};let nextId=4000;
+  const switches={failReadback:false,failUpload:false,sourceLinkState:'accepted'};let nextId=4000;
   const storage={
     get:async key=>({[key]:state[key]===undefined?undefined:structuredClone(state[key])}),
     set:async values=>Object.assign(state,structuredClone(values)),
@@ -31,6 +31,11 @@ function setup({collections=[{id:42,name:'正经玩',total:1},{id:84,name:'其�
     if(url==='https://mmbiz.qpic.cn/example/broken.png')return new Response('not found',{status:404});
     if(url.endsWith('/x/web-interface/nav'))return json({isLogin:true,mid:8080,uname:'测试账号',face:''});
     if(url.endsWith('/x/article/creative/list/all'))return json({lists:collections});
+    if(url.includes('/x/v2/dynamic/sunflower/parse?')){
+      if(switches.sourceLinkState==='failed')return new Response('unavailable',{status:503});
+      const {raw_texts:urls}=JSON.parse(init.body);
+      return json({parsed_items:Object.fromEntries(urls.map(source=>[source,switches.sourceLinkState==='accepted'?{type:1,link_type:16}:{type:0,link_type:0,unknown:{reason_text:''}}]))});
+    }
     if(url.endsWith('/x/dynamic/feed/draw/upload_bfs')){
       if(switches.failUpload)return new Response(JSON.stringify({code:-400,message:'模拟图片上传失败'}));
       const file=init.body.get('file_up');uploads.push(new Uint8Array(await file.arrayBuffer()));
@@ -97,6 +102,29 @@ test('direct import carries a grey image caption through cleanup upload save and
     assert.ok(!text.includes(caption),'图注只保留在图片注释中');
     assert.ok(text.includes('下一段正文保持可编辑。'));
     assert.equal(app.uploads.length,1,'图注不能触发额外图片上传或局部截图');
+  }finally{app.close();}
+});
+
+for(const state of ['accepted','rejected','failed'])test(`direct import source link ${state} validation preserves an editable citation and never fetches its destination`,async()=>{
+  const citationUrl='https://example.org/original-paper?edition=2';
+  const sourceHtml=articleHtml().replace('<h2>往期回顾</h2>',`<p>原文链接：<a href="${citationUrl}">Original paper</a></p><p><a href="https://example.org/unrelated">其他推广</a></p><h2>往期回顾</h2>`);
+  const app=setup({sourceHtml});
+  try{
+    app.switches.sourceLinkState=state;
+    const result=await runImport({sourceUrl});
+    assert.equal(result.verified,true);
+    const validationCalls=app.apiCalls.filter(call=>call.url.includes('/sunflower/parse'));
+    assert.equal(validationCalls.length,1);assert.deepEqual(JSON.parse(validationCalls[0].init.body),{raw_texts:[citationUrl]});
+    assert.ok(app.apiCalls.every(call=>!call.url.startsWith('https://example.org/')));
+    const nodes=app.savedPayloads[0].arg.opus.content.paragraphs.flatMap(para=>para.text?.nodes||[]);
+    const links=nodes.filter(node=>node.node_type===4);
+    const body=nodes.map(node=>node.word?.words||node.link?.show_text||'').join('');
+    assert.ok(body.includes('Original paper'));
+    assert.ok(body.includes('其他推广'));
+    assert.equal(links.length,state==='accepted'?1:0);
+    if(state==='accepted')assert.equal(links[0].link.link,citationUrl);
+    else {assert.ok(body.includes(citationUrl));assert.ok(result.warnings.some(message=>message.includes('原文链接')));}
+    assert.equal(JSON.stringify(app.savedPayloads[0]).includes('sourceLinks'),false);
   }finally{app.close();}
 });
 

@@ -6,6 +6,7 @@
   "captionExtraction": "Recognizes only the immediately following standalone text leaf with effective 9–15px type and muted gray color (mean RGB 90–190, channel spread at most 40). Retains the complete caption node and inherited semantic styling inside figure/figcaption; existing captions are preserved. Does not cross body paragraphs, choose a single image within a same-paragraph image group, move entire multi-paragraph sections, or absorb heading/credit/disclaimer blocks. The shared upper/lower-image caption in the translation sample stays body text. Bilibili native comment eligibility, the 100-character limit and formatting fallback are checked separately by the native converter.",
   "reviewedOrnaments": "The 厉娜 template is recognized only by the reviewed 14 ornament asset identities and its overlapping-grid structure. Its 14 decorative cover layers, five 58px chapter badges, and twelve pairs of 34px heading ornaments are omitted after role checks; live lazy images may use width:100% or no width inside the same verified fixed-size wrapper. All three cover text layers, five chapter headings, 19 captioned images and the two other content images remain. Unknown collages and unrelated small images are retained. The 翻译专栏 character-card heading is normalized so its 福利时间 footer boundary can be recognized.",
   "footerCleanup": "Removes the independent opening WeChat giveaway lead and standalone author-opinion/institution-position disclaimers. Tail boundaries include the normalized 福利时间/互动问题 columns and explicit 投票/上期也精彩 headings. Earlier author, editor and reference text remains; text after a clear footer boundary is omitted with the entire tail column. The translation sample retains three content images; the Q&A sample retains seven content images and all 12 answers, reference citations and 26 native formulas after conversion. Navigation BR wrappers are preserved for the native converter to emit separate editable lines.",
+  "sourceLinksAndHints": "A standalone 原文链接： citation may retain exactly one validated HTTP(S) anchor with data-sync-source-link=\"true\"; its label, inline semantics and colors remain. Incoming markers are never trusted without rechecking the citation structure and URL. Bare URLs remain visible only inside this allowed source anchor; other external links follow normal cleanup. Standalone 左右滑动查看更多 component hints are omitted, while body mentions and code samples remain.",
   "reviewedAnswerPanels": "Only the 12 verified multi-paragraph answer panels beginning 答： with the matching pale background, blue border, radius and spacing omit their container backdrop after per-text contrast checks. The one reviewed tape ΔF = Fpeak − Fbaseline formula card also omits its cream backdrop and border after matching formula structure, colors, spacing and contrast. Its brown text, italics and subscripts remain native. Inline highlights, navigation blocks, unknown colored cards and white-on-brown headings retain their backgrounds. Background shorthand solid colors are explicitly preserved before classification; CSSOM image resets initial/unset are recognized as none, while URLs, gradients and inherit remain protected. Equivalent expanded corner/padding and normal font-weight forms match the same reviewed structures.",
   "articles": [
     {
@@ -21,7 +22,7 @@
         "imagesWithRemoteDataSrc": 5
       },
       "retained": {
-        "removedLinks": 1,
+        "removedLinks": 0,
         "removedEmptyBlocks": 52,
         "removedImagePlaceholders": 0,
         "removedEmptySvg": 0,
@@ -31,6 +32,7 @@
         "removedHiddenElements": 1,
         "removedStanceStatements": 2,
         "removedOpeningLeads": 1,
+        "removedComponentHints": 0,
         "flattenedCharacterHeadings": 1,
         "trimmedTail": 1,
         "removedDecorativeImages": 0,
@@ -42,7 +44,8 @@
         "backgrounds": 0,
         "superscripts": 0,
         "subscripts": 0,
-        "captions": 1
+        "captions": 1,
+        "sourceLinks": 1
       },
       "removedDecorativeImages": [],
       "formatting": {
@@ -66,14 +69,19 @@
           "text": "乔伊・米恩发现，她的丈夫以及其他帕金森病患者身上会散发出一种独特气味。米恩如今是曼彻斯特大学一支研究团队的成员，该团队正在开发用于诊断这种疾病的相关检测方法。 图源：曼彻斯特大学"
         }
       ],
+      "sourceLinks": [
+        {
+          "href": "https://knowablemagazine.org/content/article/health-disease/2026/disease-sniffing-tests-get-closer-to-reality",
+          "text": "Sniffing out the link between odor and disease"
+        }
+      ],
       "blockingIssues": [],
       "warnings": [
         "已将横排单字装饰标题整理为一行文字，省略字卡和拼音装饰。",
         "已清除独立的立场声明，保留作者、编辑和参考资料。",
         "已清除开头的微信互动赠书引导。",
         "已删除回顾、福利互动或投票等尾部栏目及其后面的内容。",
-        "已将 1 处图片下方的灰色小字识别为图注。",
-        "已清除 1 处外链（保留链接文字和图片）。"
+        "已将 1 处图片下方的灰色小字识别为图注。"
       ],
       "localAssets": [],
       "backgrounds": []
@@ -101,6 +109,7 @@
         "removedHiddenElements": 1,
         "removedStanceStatements": 0,
         "removedOpeningLeads": 0,
+        "removedComponentHints": 1,
         "flattenedCharacterHeadings": 0,
         "trimmedTail": 1,
         "removedDecorativeImages": 0,
@@ -112,18 +121,18 @@
         "backgrounds": 0,
         "superscripts": 19,
         "subscripts": 0,
-        "captions": 3
+        "captions": 3,
+        "sourceLinks": 0
       },
       "removedDecorativeImages": [],
       "formatting": {
         "boldNodes": 159,
-        "coloredNodes": 318,
+        "coloredNodes": 316,
         "colors": [
           "rgb(62, 62, 62)",
           "rgba(0, 0, 0, 0.9)",
-          "rgb(0, 0, 0)",
-          "rgb(214, 214, 214)",
           "rgb(128, 128, 128)",
+          "rgb(0, 0, 0)",
           "rgb(46, 49, 145)",
           "rgb(89, 89, 89)",
           "rgb(1, 1, 1)",
@@ -156,9 +165,11 @@
           "text": "图：左格从上方看，枕木在实地上等间距，每条视线与画面相交的地方就是画上的位置；右格是纸上画出来的样子，枕木越远越密。定性示意，非真实比例。"
         }
       ],
+      "sourceLinks": [],
       "blockingIssues": [],
       "warnings": [
         "已略去 12 处问答面板的装饰底色，保留正文、公式和文字高亮。",
+        "已清除微信组件的滑动提示。",
         "已删除回顾、福利互动或投票等尾部栏目及其后面的内容。",
         "已将 3 处图片下方的灰色小字识别为图注。",
         "已清除 10 处外链（保留链接文字和图片）。",
@@ -197,6 +208,7 @@
         "removedHiddenElements": 1,
         "removedStanceStatements": 0,
         "removedOpeningLeads": 0,
+        "removedComponentHints": 0,
         "flattenedCharacterHeadings": 0,
         "trimmedTail": 1,
         "removedDecorativeImages": 0,
@@ -208,7 +220,8 @@
         "backgrounds": 0,
         "superscripts": 0,
         "subscripts": 7,
-        "captions": 4
+        "captions": 4,
+        "sourceLinks": 0
       },
       "removedDecorativeImages": [],
       "formatting": {
@@ -253,6 +266,7 @@
           "text": "真实的X射线衍射点阵"
         }
       ],
+      "sourceLinks": [],
       "blockingIssues": [],
       "warnings": [
         "已删除回顾、福利互动或投票等尾部栏目及其后面的内容。",
@@ -292,6 +306,7 @@
         "removedHiddenElements": 1,
         "removedStanceStatements": 0,
         "removedOpeningLeads": 0,
+        "removedComponentHints": 0,
         "flattenedCharacterHeadings": 0,
         "trimmedTail": 1,
         "removedDecorativeImages": 0,
@@ -303,7 +318,8 @@
         "backgrounds": 0,
         "superscripts": 0,
         "subscripts": 4,
-        "captions": 9
+        "captions": 9,
+        "sourceLinks": 0
       },
       "removedDecorativeImages": [],
       "formatting": {
@@ -365,6 +381,7 @@
           "text": "a：旧峰在第二次读出时接近消失 b：在25毫米转折处保持100秒后，后续读出仍有残余峰；c：换为亚克力底面后也有残余峰。NR为读出次数"
         }
       ],
+      "sourceLinks": [],
       "blockingIssues": [],
       "warnings": [
         "已略去已确认公式卡片的装饰底色和边框，保留公式文字、颜色和上下标。",
@@ -408,6 +425,7 @@
         "removedHiddenElements": 1,
         "removedStanceStatements": 0,
         "removedOpeningLeads": 0,
+        "removedComponentHints": 0,
         "flattenedCharacterHeadings": 0,
         "trimmedTail": 1,
         "removedDecorativeImages": 43,
@@ -419,7 +437,8 @@
         "backgrounds": 0,
         "superscripts": 0,
         "subscripts": 0,
-        "captions": 19
+        "captions": 19,
+        "sourceLinks": 0
       },
       "removedDecorativeImages": [
         {
@@ -753,6 +772,7 @@
           "text": "图18｜“只是因为我愿意，和她一起浪费时间。”一起相处，本身也可以是一件具体的小事。"
         }
       ],
+      "sourceLinks": [],
       "blockingIssues": [],
       "warnings": [
         "已略去 43 张已确认的模板装饰图，保留标题和正文配图。",

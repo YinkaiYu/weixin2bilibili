@@ -50,6 +50,7 @@ for (const expected of expectations) {
         const image=caption.parentElement.querySelector('img');
         return {imageIndex:[...cleanedDocument.images].indexOf(image),sourceUrl:image?.getAttribute('src') || '',text:caption.textContent.trim()};
       }),
+      sourceLinks:[...cleanedDocument.querySelectorAll('a[data-sync-source-link="true"]')].map(link=>({href:link.getAttribute('href'),text:link.textContent})),
       blockingIssues:parsed.blockingIssues, warnings:parsed.warnings,
       localAssets,
       backgrounds:[...cleanedDocument.querySelectorAll('[data-sync-background-url]')].map(node=>({url:node.getAttribute('data-sync-background-url'),textPreview:node.textContent.slice(0,45),requiresLocalLayoutConversion:true})),
@@ -62,13 +63,14 @@ for (const expected of expectations) {
     assert.equal(parsed.stats.trimmedTail,1);
     for (const key of ['images','gifs','formulas','superscripts','subscripts','backgrounds','captions']) assert.equal(parsed.stats[key],expected[key],key);
     const document = new DOMParser().parseFromString(parsed.html,'text/html');
-    assert.equal(document.querySelectorAll('script,iframe,a[href],img:not([src])').length,0);
+    assert.equal(document.querySelectorAll('script,iframe,a[href]:not([data-sync-source-link="true"]),img:not([src])').length,0);
+    assert.equal(parsed.stats.sourceLinks,expected.collection==='翻译专栏'?1:0);
     assert.ok([...document.querySelectorAll('img')].every(img=>/^https:\/\/(?:mmbiz\.qpic\.cn|res\.wx\.qq\.com)\//.test(img.getAttribute('src'))));
     assert.ok([...document.querySelectorAll('svg')].every(svg=>svg.closest('[data-formula],[data-latex]')));
     assert.ok(parsed.blockingIssues.every(issue=>issue.includes('CSS 背景图')));
     assert.doesNotMatch(document.body.textContent,/近期热门文章Top10|往期回顾|上期回顾/);
     const cleanedAgain = cleanArticle(parsed.html,{sourceUrl:parsed.sourceUrl});
-    for (const key of ['images','gifs','formulas','superscripts','subscripts','backgrounds','captions']) assert.equal(cleanedAgain.stats[key],parsed.stats[key],`second cleanup ${key}`);
+    for (const key of ['images','gifs','formulas','superscripts','subscripts','backgrounds','captions','sourceLinks']) assert.equal(cleanedAgain.stats[key],parsed.stats[key],`second cleanup ${key}`);
     assert.equal(cleanedAgain.html,parsed.html,'cleanup remains idempotent after caption association');
     assert.deepEqual(cleanedAgain.blockingIssues,parsed.blockingIssues);
     if (expected.collection==='问答') {
@@ -80,6 +82,8 @@ for (const expected of expectations) {
       assert.equal(document.querySelector('pre code').querySelectorAll('br').length,12);
       assert.doesNotMatch(document.body.textContent,/投票|上期也精彩|本期答题团队/);
       assert.match(document.body.textContent,/Hayashi M, Motoyoshi N, Hori T/);
+      assert.equal(parsed.stats.removedComponentHints,1);
+      assert.doesNotMatch(document.body.textContent,/左右滑动查看更多/);
     }
     else assert.equal(parsed.stats.removedAnswerPanelBackgrounds,0);
     if(expected.file.startsWith('摸了')) {
@@ -97,6 +101,9 @@ for (const expected of expectations) {
       assert.equal(parsed.stats.removedStanceStatements,2);
       assert.doesNotMatch(document.body.textContent,/福利时间|互动问题|认真阅读下面的文章|仅代表作者观点|不代表中科院物理所立场/);
       assert.match(document.body.textContent,/作者：Marta Zaraska翻译：二律背反审校：持之以恒/);
+      const link=document.querySelector('a[data-sync-source-link="true"]');
+      assert.equal(link.getAttribute('href'),'https://knowablemagazine.org/content/article/health-disease/2026/disease-sniffing-tests-get-closer-to-reality');
+      assert.equal(link.textContent,'Sniffing out the link between odor and disease');
     }
     if (expected.file.includes('厉娜')) {
       const indices=parsed.removedDecorativeImages.map(item=>item.imageIndex);
@@ -134,6 +141,7 @@ if (process.env.WRITE_ARTICLE_AUDIT === '1') {
     captionExtraction:'Recognizes only the immediately following standalone text leaf with effective 9–15px type and muted gray color (mean RGB 90–190, channel spread at most 40). Retains the complete caption node and inherited semantic styling inside figure/figcaption; existing captions are preserved. Does not cross body paragraphs, choose a single image within a same-paragraph image group, move entire multi-paragraph sections, or absorb heading/credit/disclaimer blocks. The shared upper/lower-image caption in the translation sample stays body text. Bilibili native comment eligibility, the 100-character limit and formatting fallback are checked separately by the native converter.',
     reviewedOrnaments:'The 厉娜 template is recognized only by the reviewed 14 ornament asset identities and its overlapping-grid structure. Its 14 decorative cover layers, five 58px chapter badges, and twelve pairs of 34px heading ornaments are omitted after role checks; live lazy images may use width:100% or no width inside the same verified fixed-size wrapper. All three cover text layers, five chapter headings, 19 captioned images and the two other content images remain. Unknown collages and unrelated small images are retained. The 翻译专栏 character-card heading is normalized so its 福利时间 footer boundary can be recognized.',
     footerCleanup:'Removes the independent opening WeChat giveaway lead and standalone author-opinion/institution-position disclaimers. Tail boundaries include the normalized 福利时间/互动问题 columns and explicit 投票/上期也精彩 headings. Earlier author, editor and reference text remains; text after a clear footer boundary is omitted with the entire tail column. The translation sample retains three content images; the Q&A sample retains seven content images and all 12 answers, reference citations and 26 native formulas after conversion. Navigation BR wrappers are preserved for the native converter to emit separate editable lines.',
+    sourceLinksAndHints:'A standalone 原文链接： citation may retain exactly one validated HTTP(S) anchor with data-sync-source-link="true"; its label, inline semantics and colors remain. Incoming markers are never trusted without rechecking the citation structure and URL. Bare URLs remain visible only inside this allowed source anchor; other external links follow normal cleanup. Standalone 左右滑动查看更多 component hints are omitted, while body mentions and code samples remain.',
     reviewedAnswerPanels:'Only the 12 verified multi-paragraph answer panels beginning 答： with the matching pale background, blue border, radius and spacing omit their container backdrop after per-text contrast checks. The one reviewed tape ΔF = Fpeak − Fbaseline formula card also omits its cream backdrop and border after matching formula structure, colors, spacing and contrast. Its brown text, italics and subscripts remain native. Inline highlights, navigation blocks, unknown colored cards and white-on-brown headings retain their backgrounds. Background shorthand solid colors are explicitly preserved before classification; CSSOM image resets initial/unset are recognized as none, while URLs, gradients and inherit remain protected. Equivalent expanded corner/padding and normal font-weight forms match the same reviewed structures.',
     articles:entries,
   },null,2)+'\n');

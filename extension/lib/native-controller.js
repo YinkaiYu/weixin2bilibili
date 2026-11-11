@@ -58,15 +58,22 @@ async function importArticle({sourceUrl='',html='',localFiles:files=[]},onProgre
   const client=createBridgeClient({jobKey});
   onProgress('正在匹配 B站文集…');const account=await client.getLoginInfo();
   const collections=await client.listCollections();const {collection,candidates}=chooseCollection(article.collectionNames,collections,article.title);
+  const requestedSourceLinks=nativeCheck.requestedSourceLinks||nativeCheck.sourceLinks||[];
+  let sourceLinkValidation={accepted:[],rejected:[],failed:[]};
+  if(requestedSourceLinks.length){
+    onProgress('正在核对原文链接…');
+    try{sourceLinkValidation=await client.validateSourceLinks(requestedSourceLinks);}
+    catch{sourceLinkValidation={accepted:[],rejected:[],failed:requestedSourceLinks};}
+  }
   const cacheKey='uploadCache:'+account.userId;
   let cache=(await chrome.storage.local.get(cacheKey))[cacheKey]||{};
   const migrated=await migrateImages(cleaned.html,{coverUrl:article.coverUrl,client,cache,cacheKey:account.userId,localFiles,savedPaths,fetchImpl:bridgeFetch,onCache:async value=>{
     cache=value;const entries=Object.entries(cache);if(entries.length>1500)cache=Object.fromEntries(entries.slice(-1500));await chrome.storage.local.set({[cacheKey]:cache});
   },onProgress:p=>onProgress(p.state==='error'?p.message:`正在转存图片 ${p.index+1}/${p.total}${p.state==='done'?' · 完成':''}`)});
-  const native=toOpus(migrated.html,{images:migrated.images});
+  const native=toOpus(migrated.html,{images:migrated.images,sourceLinkValidation});
   if(native.blockingIssues.length)throw new Error(native.blockingIssues.join('\n'));
   onProgress('正在保存并核对草稿…');
-  const result=await client.saveDraft({jobKey,title:article.title,content:native.content,summary:native.summary,coverUrl:migrated.coverUrl,collectionId:collection?.id,original:true});
+  const result=await client.saveDraft({jobKey,title:article.title,content:native.content,sourceLinks:native.sourceLinks||[],summary:native.summary,coverUrl:migrated.coverUrl,collectionId:collection?.id,original:true});
   const outcome=[];
   if(!collection&&candidates.length)outcome.push({severity:'warning',message:`未找到唯一对应的文集（${candidates.join('、')}），请在发布设置中选择。`});
   if(result.verified!==true){

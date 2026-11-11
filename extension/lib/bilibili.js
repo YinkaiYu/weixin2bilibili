@@ -5,11 +5,14 @@
  * Bundle: /bfs/static/sunflower/read-editor/assets/index-iVnxuzkp.js
  * Only uploads assets and saves drafts. There is deliberately no publish method.
  */
+import {normalizeSourceLink} from './source-links.js';
+
 export const BILIBILI_EDITOR_VERSION = 'eva3-4.0.0';
 export const BILIBILI_ENDPOINTS = Object.freeze({
   login: '/x/web-interface/nav',
   upload: '/x/dynamic/feed/draw/upload_bfs',
   collections: '/x/article/creative/list/all',
+  sourceLinks: '/x/v2/dynamic/sunflower/parse',
   save: '/x/dynamic/feed/article/draft/add',
   view: '/x/dynamic/feed/article/draft/view',
 });
@@ -67,8 +70,10 @@ function collectPictures(content) {
   return result;
 }
 
-function validateContent(content) {
+function validateContent(content,sourceLinks=[]) {
   if (!content || !Array.isArray(content.paragraphs) || content.paragraphs.length === 0) throw new BilibiliError('正文为空，不能保存草稿。');
+  if(!Array.isArray(sourceLinks)||sourceLinks.some(url=>!normalizeSourceLink(url)))throw new BilibiliError('原文出处链接清单无效，已停止保存。');
+  const allowedSources=new Set(sourceLinks.map(normalizeSourceLink));
   for (const picture of collectPictures(content)) {
     normalizeBiliImageUrl(picture.url);
     if (!(Number(picture.width) > 0) || !(Number(picture.height) > 0) || !(Number(picture.size) > 0)) {
@@ -81,15 +86,21 @@ function validateContent(content) {
     }
   }
   for (const para of content.paragraphs) {
+    if(para.link_card)throw new BilibiliError('正文含未确认的链接卡片，已停止保存。');
     for (const node of para.text?.nodes || []) {
-      if (node.link?.link) throw new BilibiliError('正文仍含链接，请清理后再保存。');
+      if(node.link||node.node_type===4||node.node_type===3){
+        const url=normalizeSourceLink(node.link?.link);
+        if(node.node_type!==4||node.link?.link_type!==16||!url||!allowedSources.has(url)||typeof node.link.show_text!=='string'||!node.link.show_text.trim()) {
+          throw new BilibiliError('正文含未确认或无效的原文出处链接，已停止保存。');
+        }
+      }
     }
   }
 }
 
-export function buildDraftPayload({title, content, coverUrl, collectionId = 0, original = true, draftId, summary = ''}) {
+export function buildDraftPayload({title, content, coverUrl, collectionId = 0, original = true, draftId, summary = '',sourceLinks=[]}) {
   if (!String(title || '').trim()) throw new BilibiliError('请填写文章标题。');
-  validateContent(content);
+  validateContent(content,sourceLinks);
   const arg = {
     type: 4, template_id: 1, category_id: 15,
     title: String(title).trim(), private_pub: 2,
@@ -152,6 +163,21 @@ function backgroundStyle(value) {
   return stable(result);
 }
 
+function canonicalSourceLink(node) {
+  const link={...(node.link||{})},style={...(link.style||{})};
+  const url=normalizeSourceLink(link.link);
+  if(!url)throw new Error('原文出处链接无效');
+  // Official convertTiptapToLinkNode creates these defaults; compare their
+  // rendered meaning while retaining unknown/non-default business fields.
+  for(const name of ['bold','italic','underline','strikethrough'])style[name]=!!style[name];
+  style.font_size=Number(style.font_size||0);style.font_level=style.font_level||'regular';
+  const result={...link,link:url,show_text:link.show_text??'',link_type:Number(link.link_type),
+    icon:link.icon||'',icon_suffix:link.icon_suffix||'',biz_id:link.biz_id||'',pics:link.pics||[],
+    style:stable(style),bg_style:backgroundStyle(link.bg_style)};
+  const extra={...node};delete extra.node_type;delete extra.link;
+  return {type:4,link:stable(result),extra:stable(extra)};
+}
+
 function canonicalContent(content) {
   const listHashes = new Set((content?.paragraphs || []).filter(para => [5,6].includes(Number(para.para_type)))
     .map(para => para.format?.combine_hash).filter(hash => typeof hash === 'string' && hash));
@@ -172,6 +198,7 @@ function canonicalContent(content) {
         return {type: 1, text: word.words ?? '', font: Number(word.font_size || 17), level: word.font_level || 'regular', colors: paletteColor(word),
           style: ['bold', 'italic', 'underline', 'strikethrough'].map(key => !!word.style?.[key]), background: backgroundStyle(word.bg_style)};
       }
+      if (node.node_type === 4) return canonicalSourceLink(node);
       if (node.node_type === 5) return {type: 5, latex: node.formula?.latex_content || ''};
       return stable(node);
     });
@@ -213,13 +240,14 @@ export function verifyDraft(expected, draft) {
       const wanted = canonicalContent(arg.opus.content), actual = canonicalContent(draft.opus.content);
       if (JSON.stringify(wanted) !== JSON.stringify(actual)) {
         issues.push('B 站保存后的正文、图片顺序、公式或文字样式发生变化，请打开草稿核对。');
-        const fonts = [], paletteChanges = [], captionChanges = [];
+        const fonts = [], paletteChanges = [], captionChanges = [], sourceLinkChanges = [];
         for (let p=0;p<Math.min(wanted.length,actual.length);p++) {
           const beforePictures = wanted[p].pictures || [], afterPictures = actual[p].pictures || [];
           for (let n=0;n<Math.max(beforePictures.length,afterPictures.length);n++) {
             if ((beforePictures[n]?.comment || '') !== (afterPictures[n]?.comment || '')) captionChanges.push(p+1);
           }
           const before=wanted[p].text || [], after=actual[p].text || [];
+          if(JSON.stringify(before.filter(node=>node.type===4))!==JSON.stringify(after.filter(node=>node.type===4)))sourceLinkChanges.push(p+1);
           for (let n=0;n<Math.min(before.length,after.length);n++) {
             if(before[n].type!==1 || after[n].type!==1 || before[n].text!==after[n].text) continue;
             if(before[n].font!==after[n].font || before[n].level!==after[n].level) fonts.push({paragraph:p+1,from:before[n].font,to:after[n].font});
@@ -229,8 +257,9 @@ export function verifyDraft(expected, draft) {
         if(fonts.length) issues.push(`${fonts.length} 处文字字号发生变化（${fonts.slice(0,3).map(item=>`第 ${item.paragraph} 段 ${item.from}→${item.to}`).join('、')}${fonts.length>3?'…':''}）。`);
         if(paletteChanges.length) issues.push(`${paletteChanges.length} 处文字颜色或 B 站主题色发生变化（第 ${[...new Set(paletteChanges)].slice(0,5).join('、')} 段），请检查明暗模式下的显示。`);
         if(captionChanges.length) issues.push(`${captionChanges.length} 处图片注释发生变化（第 ${[...new Set(captionChanges)].slice(0,5).join('、')} 段），请检查图注是否完整并对应正确图片。`);
+        if(sourceLinkChanges.length)issues.push(`原文出处链接的地址、文字或样式发生变化（第 ${sourceLinkChanges.slice(0,5).join('、')} 段），请检查链接是否仍可点击并指向原文。`);
       }
-    } catch { issues.push('保存后的正文包含无法核对的图片地址。'); }
+    } catch { issues.push('保存后的正文包含无法核对的图片或原文出处链接地址。'); }
   }
   return {ok: issues.length === 0, issues};
 }
@@ -327,6 +356,30 @@ export function createBilibiliClient({fetchImpl = globalThis.fetch?.bind(globalT
     if (!Array.isArray(data?.lists)) throw new BilibiliError('B 站文集返回格式已变化，请在 B 站草稿中手动选择文集。');
     return data.lists.map(item => ({id: numericId(item.id, '文集编号'), name: String(item.name || ''), count: Number(item.total || 0)}));
   }
+  async function validateSourceLinks(urls) {
+    if(!Array.isArray(urls)||urls.some(url=>!normalizeSourceLink(url)))throw new BilibiliError('原文出处链接清单无效。');
+    const sources=[...new Set(urls.map(normalizeSourceLink))],result={accepted:[],rejected:[],failed:[]};
+    // The official link ValidationQueue sends at most 50 URLs per batch. Only
+    // marked citation URLs reach here; no request is made to the source host.
+    for(let index=0;index<sources.length;index+=50){
+      const batch=sources.slice(index,index+50);
+      try{
+        const token=await csrf();
+        const data=await request(`${BILIBILI_ENDPOINTS.sourceLinks}?csrf=${encodeURIComponent(token)}`,{
+          method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({raw_texts:batch}),
+        });
+        const parsed=data?.parsed_items;
+        for(const url of batch){
+          const item=parsed&&typeof parsed==='object'&&!Array.isArray(parsed)&&Object.hasOwn(parsed,url)?parsed[url]:null;
+          if(!item||!Number.isInteger(item.type)||!Number.isInteger(item.link_type))result.failed.push(url);
+          else if(item.type===1&&item.link_type===16)result.accepted.push(url);
+          else if(item.type===0)result.rejected.push(url);
+          else result.failed.push(url);
+        }
+      }catch{result.failed.push(...batch);}
+    }
+    return result;
+  }
   async function uploadImage(blob, {filename = 'image', signal, verifyAnimation = true} = {}) {
     if (!(blob instanceof Blob) || blob.size === 0) throw new BilibiliError('图片为空，无法上传。');
     const {mime, extension} = await sniffImage(blob);
@@ -412,5 +465,5 @@ export function createBilibiliClient({fetchImpl = globalThis.fetch?.bind(globalT
     if (checkpointIssue) verification = {ok: false, issues: [checkpointIssue, ...verification.issues]};
     return {draftId: String(draftId), draftUrl, verified: verification.ok, verification, draft};
   }
-  return {getLoginInfo, listCollections, uploadImage, getDraft, saveDraft};
+  return {getLoginInfo, listCollections, validateSourceLinks, uploadImage, getDraft, saveDraft};
 }
