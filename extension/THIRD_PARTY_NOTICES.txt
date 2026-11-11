@@ -1,3 +1,10 @@
+Project license scope
+
+Scope: This license covers original project code and documentation. It does
+not grant rights to institutional names, logos, trademarks, imported articles,
+or other third-party materials. See BRANDING.md in the project repository
+for name and logo rights; third-party code licenses are listed below.
+
 html2canvas 1.4.1
 Project: https://github.com/niklasvh/html2canvas
 Bundled file: vendor/html2canvas.min.js
