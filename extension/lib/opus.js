@@ -1,6 +1,6 @@
 /**
  * Small, original HTML -> Bilibili Opus converter. Wire shapes were inspected in
- * the public read-editor bundle on 2026-11-11; see docs/native-schema.md.
+ * the public read-editor bundle on 2026-11-11; see docs/bilibili-protocol.md.
  * This module never downloads content, uploads, or publishes anything.
  */
 import {normalizeSourceLink} from './source-links.js';

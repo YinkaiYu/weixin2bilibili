@@ -12,8 +12,8 @@
 *.txt text eol=lf
 .gitignore text eol=lf
 .gitattributes text eol=lf
+.editorconfig text eol=lf
 LICENSE text eol=lf
-*.ps1 text eol=crlf
 *.png binary
 *.pdf binary
 *.zip binary

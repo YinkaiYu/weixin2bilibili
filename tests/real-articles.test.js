@@ -133,7 +133,8 @@ for (const expected of expectations) {
 }
 
 if (process.env.WRITE_ARTICLE_AUDIT === '1') {
-  fs.writeFileSync(path.join(root,'docs','article-audit.json'),JSON.stringify({
+  fs.mkdirSync(path.join(root,'test-artifacts'), { recursive:true });
+  fs.writeFileSync(path.join(root,'test-artifacts','article-audit.json'),JSON.stringify({
     schemaVersion:1,
     verification:'Local HTML parsing only. Page scripts were not executed; no external requests were made. Bilibili save/readback is a separate integration check.',
     localAssetResolution:'Match sourceUrl to selected File using localPath relative to the saved HTML folder. data-src remains the original remote URL; localasset:/// + encodeURIComponent(localPath) is used only when no remote image source exists. Read image bytes and substitute an object/data URL for preview, then upload original bytes. Do not infer resource mapping by filename alone.',

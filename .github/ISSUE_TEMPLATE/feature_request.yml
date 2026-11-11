@@ -1,0 +1,33 @@
+name: 功能建议
+description: 描述使用场景与希望改进的行为
+title: "[建议] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        插件将公众号内容整理为可编辑的 B站草稿，发布由使用者在 B站完成。
+        请用场景和期望行为描述需求，无需提供账号、凭据或完整文章。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 使用场景与遇到的困难
+      description: 你正在完成什么操作，现有行为哪里不方便？
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 希望的行为
+      description: 描述一次操作后的可观察结果；涉及格式时，说明必须保留的内容和是否接受局部转图。
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 目前的处理方法（可选）
+      description: 你现在怎样完成这件事？哪些步骤可以减少？
+  - type: textarea
+    id: example
+    attributes:
+      label: 最小示例或补充说明（可选）
+      description: 只提供与需求相关的片段或裁剪截图，请移除私人信息。

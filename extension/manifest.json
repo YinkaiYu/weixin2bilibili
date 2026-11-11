@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "物理所B站导入微信文章",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "将微信公众号文章整理成可编辑的B站专栏草稿，转存图片并检查格式。不会自动发布。",
   "minimum_chrome_version": "120",
   "permissions": [

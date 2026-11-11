@@ -1,0 +1,68 @@
+name: 报告问题
+description: 导入失败、内容缺失或格式显示不符合预期
+title: "[问题] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请提供能说明问题的最少信息，无需提交真实账号或完整文章。
+        不要粘贴 Cookie、令牌、请求认证头或私人内容；截图请仅保留相关区域。
+  - type: input
+    id: version
+    attributes:
+      label: 插件版本
+      description: 可在浏览器的扩展管理页查看。
+      placeholder: 例如 0.1.9
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 浏览器与操作系统
+      placeholder: 例如 Edge 版本号，Windows 11
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: 问题出现在哪一步？
+      options:
+        - 安装或打开导入面板
+        - 读取公众号文章或本地网页
+        - 图片转存或格式转换
+        - 保存或核对草稿
+        - 在 B站中编辑或查看草稿
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 操作步骤
+      description: 说明通过文章链接还是本地 HTML 导入，以及出现问题前的操作。
+      placeholder: |
+        1. 打开……
+        2. 点击……
+        3. 出现……
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果与错误提示
+      description: 可附上导入结果「详情」中的相关文字或裁剪后的截图；不要附完整请求日志。
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果
+      description: 格式问题请说明哪些内容应保留，例如图注、动图、上下标或文字颜色。
+    validations:
+      required: true
+  - type: textarea
+    id: minimal_example
+    attributes:
+      label: 最小复现示例（可选）
+      description: 可粘贴不含私人数据的最小 HTML 片段。无法提取时留空即可，无需上传完整文章或账号资料。
+      render: html
