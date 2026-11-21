@@ -12,13 +12,13 @@ import { toOpus } from '../extension/lib/opus.js';
 const directory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '测试文章');
 const document = new JSDOM('').window.document;
 const cases = [
-  { name: '美瞳爱好者集合，新眼珠享新人生.html', raster: 0, images: 21, formulas: 0, captions: 0 },
+  { name: '美瞳爱好者集合，新眼珠享新人生.html', raster: 0, images: 21, formulas: 0, captions: 4 },
   { name: '细思极恐！为什么我们在三维空间里永远走不出镜像？.html', raster: 0, images: 3, formulas: 82, captions: 0 },
   { name: '今年诺奖奖金又上涨了一百万？！发了125年，诺贝尔的钱为什么越花越多？.html', raster: 0, images: 13, formulas: 0, captions: 7 },
   { name: '遍地开花的拼豆店，卖的竟是“诺奖物理”？（内附物理所拼豆图纸）.html', raster: 0, images: 26, formulas: 18, captions: 12 },
   { name: '不抽血不拍片，闻一闻就能接收身体警报？？？.html', tail: 'fu福li利shi时jian间', raster: 0, images: 3, formulas: 0, captions: 1 },
-  { name: '为什么只睡20分钟，下午就能精神满满？_ No. 537.html', tail: '投票', ordinaryUrls: 5, raster: 3, images: 10, formulas: 19, captions: 0 },
-  { name: '为什么你的车行驶再快，也甩不掉车里那只蚊子？_ No. 539.html', tail: '投票', raster: 0, images: 7, formulas: 22, captions: 0 },
+  { name: '为什么只睡20分钟，下午就能精神满满？_ No. 537.html', tail: '投票', ordinaryUrls: 5, raster: 3, images: 10, formulas: 19, captions: 3 },
+  { name: '为什么你的车行驶再快，也甩不掉车里那只蚊子？_ No. 539.html', tail: '投票', raster: 0, images: 7, formulas: 21, captions: 5 },
   { name: '你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html', tail: '上期回顾', raster: 0, images: 15, emotes: ['[doge]'], formulas: 11, captions: 4 },
   { name: '摸了半天找不到头，胶带却记得你撕到哪儿？.html', raster: 0, images: 12, formulas: 4, captions: 9 },
   { name: '要宣布翻篇了？那我磁化损失呢，厉娜.html', raster: 0, images: 21, formulas: 0, captions: 19 },
@@ -150,12 +150,19 @@ for (const sample of cases) {
     assert.deepEqual(pictures.flatMap(picture=>{assert.ok(uploaded.has(picture.url));return uploaded.get(picture.url).images;}),baseline.images.filter(url=>!expectedEmoteSources.includes(url)),'expanding each mock raster recovers the original image order and identities');
     assert.equal(pictures.filter(p => p.comment).length, sample.captions);
     const withoutCaptions = new document.defaultView.DOMParser().parseFromString(doc.body.innerHTML, 'text/html');
+    const captionScripts = [];
     for (const [index, picture] of pictures.entries()) {
       if (!picture.comment) continue;
       const caption = [...withoutCaptions.images].filter(image=>!wechatEmote(image))[index].closest('figure')?.querySelector('figcaption');
       assert.ok(caption, '每条原生图片注释必须来自同一张源图片的 figcaption');
       assert.equal(picture.comment, caption.textContent.replace(/[\u200B-\u200D\uFEFF]/g, '').replace(/\s+/g, ' ').trim());
       assert.ok(picture.comment.length <= 100, '图注不能超过原生编辑器限制');
+      for (const script of scriptSources(caption)) {
+        assert.equal(script.tag, 'sup');
+        assert.match(script.text, /^\[\d/);
+        assert.ok(picture.comment.includes(script.text), 'reference stays in the image comment');
+        captionScripts.push(script);
+      }
       caption.remove();
     }
     // Native captions have one representation, not a duplicate text paragraph.
@@ -173,8 +180,9 @@ for (const sample of cases) {
       const node=formulaNodes.find(node=>!explicitFormulaNodes.has(node)&&latexKey(node.formula.latex_content).includes(latexKey(latex)));
       assert.ok(node,`原生公式的每次出现必须保留：${latex}`);explicitFormulaNodes.add(node);
     }
-    assert.equal(formulaNodes.length,remainingFormulas.length+baseline.scripts.length-captures.reduce((sum,capture)=>sum+capture.scripts.length,0),'every original formula/script remains either native or explicitly inside a mock raster');
-    for(const [tag,stat] of [['sup','superscripts'],['sub','subscripts']])assert.equal(result.stats[stat],baseline.scripts.filter(script=>script.tag===tag).length-captures.flatMap(capture=>capture.scripts).filter(script=>script.tag===tag).length,`source ${tag} occurrences remain native outside the recorded rasters`);
+    const nonFormulaScripts=[...captionScripts,...captures.flatMap(capture=>capture.scripts)];
+    assert.equal(formulaNodes.length,remainingFormulas.length+baseline.scripts.length-nonFormulaScripts.length,'every script remains native, inside a mock raster or as an image-comment reference');
+    for(const [tag,stat] of [['sup','superscripts'],['sub','subscripts']])assert.equal(result.stats[stat],baseline.scripts.filter(script=>script.tag===tag).length-nonFormulaScripts.filter(script=>script.tag===tag).length,`source ${tag} occurrences remain native outside raster and image-comment references`);
     assert.ok(formulaNodes.every(n => !n.formula.latex_content.includes('\\color{rgba(')));
     const nativeWords=result.content.paragraphs.flatMap(p=>p.text?.nodes||[]).filter(n=>n.node_type===1).map(n=>n.word);
     const nativeText=nativeWords.map(word=>word.words).join('');
@@ -201,11 +209,10 @@ for (const sample of cases) {
       assert.ok(captures.some(capture=>capture.formulas.length===5&&capture.text.startsWith('其中')),'the explanation is captured separately from its standalone equation');
       assert.ok(captures.every(capture=>capture.scripts.length===0),'citation superscripts do not trigger rasterization');
       assert.equal(pictures.filter(picture=>uploaded.get(picture.url).images.length===1).length,baseline.images.length);
-      const fallbackCaptions=[...doc.querySelectorAll('figcaption')];
-      assert.equal(fallbackCaptions.length,3);
-      assert.ok(fallbackCaptions.every(caption=>caption.style.backgroundColor==='rgb(239, 239, 246)'),'caption formatting inherits the preserved image-card background');
-      assert.ok(result.warnings.some(message=>message.includes('图注已保留为图片下方正文')));
-      for(const caption of fallbackCaptions)assert.equal(compact(nativeText).split(compact(caption.textContent)).length-1,1,'styled caption remains once in editable body text');
+      const sourceCaptions=[...doc.querySelectorAll('figcaption')];
+      assert.equal(sourceCaptions.length,3);
+      assert.ok(sourceCaptions.every(caption=>caption.style.backgroundColor==='rgb(239, 239, 246)'),'the source captions inherit the image-card background');
+      assert.deepEqual(pictures.flatMap((picture,index)=>picture.comment?[index]:[]),[2,3,9]);
       for(let q=1;q<=12;q++) assert.match(nativeText,new RegExp(`Q\\s*${q}(?!\\d)`),`Q${q}必须保留为原生文字`);
       const textOf=paragraph=>(paragraph.text?.nodes||[]).map(node=>node.word?.words||'').join('').trim();
       const navigationIndex=result.content.paragraphs.findIndex(p=>textOf(p)==='问答导航');
@@ -217,6 +224,17 @@ for (const sample of cases) {
       assert.equal(result.content.paragraphs.filter(p=>p.code).length,0);
       assert.ok(!nativeText.includes('火箭发射时'),'投票后的上期文章尾部不能导入');
       assert.ok(!nativeText.includes('上期也精彩'));
+    }
+    if (sample.name.includes('No. 539')) {
+      assert.deepEqual(pictures.map(picture=>picture.comment||''),[
+        '', '', '图1 平行光穿过水滴', '图2 不同颜色的彩虹角度', '图3：彩虹形成原因', '图4 移动视角', '凝结尾迹的形成与扩散[1]',
+      ]);
+      assert.deepEqual(captionScripts,[{tag:'sup',text:'[1]'}]);
+    }
+    if (sample.name.includes('美瞳')) {
+      assert.deepEqual(pictures.flatMap((picture,index)=>picture.comment?[[index,picture.comment]]:[]),[
+        [7,'HEMA水凝胶材料'], [13,'用于隐形眼镜制造的模具'], [14,'用于隐形眼镜脱模的模具'], [19,'加工流程示意图'],
+      ]);
     }
     if (sample.name.includes('不抽血')) {
       assert.ok(!nativeText.includes('福利时间'),'福利活动尾部不能导入');

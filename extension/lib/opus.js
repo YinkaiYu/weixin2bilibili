@@ -418,13 +418,20 @@ export function toOpus(html, { images = new Map(), document: owner, sourceLinkVa
     // muted warm/cool grays used by the supplied article templates.
     return (range === 0 && mean < 255) || (range <= 40 && mean >= 90 && mean <= 190);
   }
-  function hasCaptionFormatting(el) {
+  function hasCaptionFormatting(el, figure) {
     const ancestors = [];
     for (let parent = el.parentElement; parent; parent = parent.parentElement) ancestors.unshift(parent);
     const inherited = ancestors.reduce((style, parent) => stylesFor(parent, style), {});
+    // The parser copies the surrounding answer card's fill to the caption
+    // when it moves the text. A matching light surface is not a text highlight.
+    const surrounding = pageBackdrop(figure);
+    const lightPaper = surrounding && contrast(surrounding, NATIVE_PAGE_COLOR) <= 1.6;
     const visit = (node, carry) => {
-      const background = carry.background && !/^(?:#ffffff|white)$/i.test(carry.background);
-      if (node.nodeType === 3) return Boolean(node.textContent.trim()) && Boolean(carry.bold || carry.italic || carry.underline || carry.strikethrough || background || !neutralCaptionColor(carry.color));
+      if (node.nodeType === 3) {
+        const background = carry.background && !/^(?:#ffffff|white)$/i.test(carry.background) &&
+          !(lightPaper && sameColor(rgbaColor(carry.background), surrounding));
+        return Boolean(node.textContent.trim()) && Boolean(carry.bold || carry.italic || carry.underline || carry.strikethrough || background || !neutralCaptionColor(carry.color));
+      }
       if (node.nodeType !== 1) return false;
       const style = stylesFor(node, carry);
       return Array.from(node.childNodes).some(child => visit(child, style));
@@ -440,7 +447,7 @@ export function toOpus(html, { images = new Map(), document: owner, sourceLinkVa
     if (!text) continue;
     const descendants = [caption, ...caption.querySelectorAll('*')];
     const complex = descendants.some(el => explicitLatex(el) !== null || UNSUPPORTED.has(el.tagName) ||
-      ['IMG', 'SUP', 'SUB'].includes(el.tagName) || ['super', 'sub'].includes(el.style.verticalAlign) ||
+      el.tagName === 'IMG' || (isScriptElement(el) && !isReferenceSuperscript(el)) ||
       (el.tagName === 'A' && el.getAttribute('data-sync-source-link') === 'true') ||
       el.hasAttribute('data-wb-unsupported') || el.hasAttribute('data-sync-unsupported'));
     if (complex || text.length > IMAGE_CAPTION_MAX_LENGTH) {
@@ -448,7 +455,7 @@ export function toOpus(html, { images = new Map(), document: owner, sourceLinkVa
       warn(complex ? '含公式、上下标或复杂内容的图注已保留为图片下方正文，避免转为纯文字后丢失含义。' : '超过 100 字符的图注已完整保留为图片下方正文，避免 B 站原生图片注释截断。');
       continue;
     }
-    if (hasCaptionFormatting(caption)) {
+    if (hasCaptionFormatting(caption, figure)) {
       imageCaptions.set(pictures[0], null);
       warn('含强调样式或彩色文字的图注已保留为图片下方正文，避免 B 站原生纯文字图注丢失加粗、颜色或装饰。');
       continue;

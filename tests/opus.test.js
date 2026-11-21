@@ -268,6 +268,21 @@ test('uses native captions for the ordinary warm and cool gray source templates'
   assert.deepEqual(r.content.paragraphs.map(p => p.pic.pics[0].comment), ['暖灰图注', '冷灰图注']);
 });
 
+test('puts captions on shared light paper and their bracketed references in native comments', () => {
+  for (const [color, text, number] of [['#eff1f7','折射示意','[1]'], ['#f5efdf','另一处测量','[2, 3]']]) {
+    const result = convert(`<section style="background-color:${color}"><p>前文</p><figure><img src="${image}"><figcaption style="background-color:${color};color:#888">${text}<sup><span>${number}</span></sup></figcaption></figure><p>后文</p></section>`);
+    assert.deepEqual(result.blockingIssues, []);
+    assert.equal(result.content.paragraphs[1].pic.pics[0].comment, text + number);
+    assert.deepEqual(result.content.paragraphs.map(p=>p.para_type), [1,2,1]);
+  }
+});
+
+test('keeps caption-specific highlights as formatted text beside a picture', () => {
+  const result = convert(`<section style="background:#eff1f7"><figure><img src="${image}"><figcaption style="color:#888"><span style="background-color:#fff080">局部高亮</span></figcaption></figure></section>`);
+  assert.equal(result.content.paragraphs[0].pic.pics[0].comment,undefined);
+  assert.equal(result.content.paragraphs[1].text.nodes[0].word.bg_style.color.color,'#fff080');
+});
+
 test('retains long and semantic captions as complete body text instead of clipping or flattening them', () => {
   const long = '注'.repeat(101);
   const r = convert(`<figure><img src="${image}" data-caption="${long}"><figcaption>${long}</figcaption></figure><figure><img src="${image}"><figcaption>面积 m<sup>2</sup>，能量<span data-formula="E=mc^2"><svg></svg></span></figcaption></figure>`);
