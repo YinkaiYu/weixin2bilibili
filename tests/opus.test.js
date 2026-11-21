@@ -478,6 +478,31 @@ test('blocks strike or background on an absorbed base instead of dropping it or 
   }
 });
 
+test('keeps numeric citations editable on inherited pale backgrounds without dropping the adjacent highlight', () => {
+  for(const [name,color,reference] of [['Newton','#cbcbe3','[1]'],['Euler','#edddcc','[2, 3]']]){
+    const html=`<p><strong style="background-color:${color}">${name}<sup><span>${reference}</span></sup></strong> 后文</p>`;
+    const doc=new document.defaultView.DOMParser().parseFromString(html,'text/html');
+    assert.deepEqual(analyzeNativeTextBackgrounds(doc).unsupported,[]);
+    const result=convert(html);
+    assert.deepEqual(result.blockingIssues,[]);
+    const [word,citation,tail]=result.content.paragraphs[0].text.nodes;
+    assert.equal(word.word.words,name);
+    assert.equal(word.word.bg_style.color.color,color);
+    assert.match(citation.formula.latex_content,/^\{\}\^/);
+    assert.ok(citation.formula.latex_content.includes(reference));
+    assert.equal(tail.word.words,' 后文');
+  }
+  for(const html of [
+    '<p style="background:#222;color:#fff">Deep<sup>[1]</sup></p>',
+    '<p>Direct<sup style="background:#ddeedd">[2]</sup></p>',
+    '<p><b style="background:#ddeedd">x<sup>2</sup></b></p>',
+  ]){
+    const doc=new document.defaultView.DOMParser().parseFromString(html,'text/html');
+    assert.ok(analyzeNativeTextBackgrounds(doc).unsupported.some(item=>item.reason==='formula-background'));
+    assert.ok(convert(html).blockingIssues.length);
+  }
+});
+
 test('keeps native scripts and formulas on ordinary inherited white page backgrounds', () => {
   const r = convert('<section style="background:rgb(255,255,255)"><p>F<sub>peak</sub> 和 F<sub>baseline</sub></p><section style="background-color:white"><span data-formula="x^2"></span></section></section>');
   assert.deepEqual(r.blockingIssues, []);

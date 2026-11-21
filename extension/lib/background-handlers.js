@@ -10,8 +10,13 @@ export function isTrustedNativeSender(sender,extensionId){
   if(!extensionId||sender?.id!==extensionId||!Number.isInteger(sender.tab?.id)||sender.frameId!==0)return false;
   try{
     const page=new URL(sender.url),tab=new URL(sender.tab.url);
-    const allowed=url=>url.protocol==='https:'&&url.hostname==='member.bilibili.com'&&!url.port&&!url.username&&!url.password&&/^(?:\/york\/read-editor|\/platform\/upload\/text\/(?:new-edit|edit))\/?$/.test(url.pathname);
-    return allowed(page)&&allowed(tab);
+    const origin='https://member.bilibili.com';
+    // Chromium can keep the injection URL in sender.url across history changes.
+    // Use the browser-supplied tab URL for the current top-frame route.
+    const sameSite=url=>url.protocol==='https:'&&url.origin===origin&&!url.username&&!url.password;
+    return sameSite(page)&&sameSite(tab)&&
+      (sender.origin===undefined||sender.origin===origin)&&
+      /^(?:\/york\/read-editor|\/platform\/upload\/text\/(?:new-edit|edit))\/?$/.test(tab.pathname);
   }catch{return false;}
 }
 

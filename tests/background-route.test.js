@@ -7,12 +7,17 @@ import {isTrustedNativeSender} from '../extension/lib/background-handlers.js';
 const script=(await fs.readFile(new URL('../extension/background.js',import.meta.url),'utf8')).replace(/^import .*;\r?\n/,'');
 function setup({missingContentScript=false,downloadError}={}){
   let onAction,onMessage;const calls=[];let messages=0;
-  const context=vm.createContext({URL,AbortSignal,createBackgroundHandler:()=>async()=>({ok:true,data:{}}),isTrustedNativeSender,chrome:{
+  const fetch=async url=>{
+    calls.push({type:'fetch',url});
+    return new Response('<div id="js_content">示例正文</div>');
+  };
+  const context=vm.createContext({URL,AbortSignal,fetch,createBackgroundHandler:()=>async()=>({ok:true,data:{}}),isTrustedNativeSender,chrome:{
     runtime:{id:'ext',onInstalled:{addListener(){}},onStartup:{addListener(){}},onMessage:{addListener:fn=>{onMessage=fn;}}},
     action:{onClicked:{addListener:fn=>{onAction=fn;}}},
     declarativeNetRequest:{updateDynamicRules:async()=>{}},
     downloads:{download:async options=>{calls.push({type:'download',options});if(downloadError)throw new Error(downloadError);return 17;}},
     tabs:{
+      query:async()=>[],
       sendMessage:async(id,message)=>{calls.push({type:'message',id,message});if(missingContentScript&&messages++===0)throw new Error('not loaded');return {ok:true};},
       update:async(id,options)=>{calls.push({type:'update',id,options});},
       create:async options=>{calls.push({type:'create',options});return {id:7};},
@@ -29,6 +34,25 @@ test('clicking the extension in the wrapper opens import without navigation or n
     assert.equal(app.calls.length,1);assert.equal(app.calls[0].type,'message');
     assert.equal(app.calls[0].id,42);assert.equal(app.calls[0].message.type,'SHOW_IMPORT');
   }
+});
+
+test('article loading uses the current tab route after navigation within the creator center',async()=>{
+  const app=setup();
+  const message={type:'LOAD_ARTICLE',sourceUrl:'https://mp.weixin.qq.com/s/example'};
+  const sender={
+    id:'ext',frameId:0,origin:'https://member.bilibili.com',
+    url:'https://member.bilibili.com/platform/home',
+    tab:{id:42,url:'https://member.bilibili.com/platform/upload/text/new-edit'},
+  };
+  const opened=await app.message(message,sender);
+  assert.equal(opened.ok,true);
+  assert.match(opened.data.html,/示例正文/);
+  assert.equal(app.calls.length,1);
+
+  const departed=await app.message(message,{...sender,url:sender.tab.url,tab:{id:42,url:sender.url}});
+  assert.equal(departed.ok,false);
+  assert.match(departed.error.message,/不允许从此页面/);
+  assert.equal(app.calls.length,1);
 });
 
 test('missing wrapper script is injected in its existing top frame without discarding edits',async()=>{

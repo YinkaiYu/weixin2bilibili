@@ -110,6 +110,21 @@ test('padded full-width prose panels keep text and scripts native; inline highli
   assert.equal(cleanArticle(panel(inside+picture('chart'))).stats.removedAnswerPanelBackgrounds,0);
 });
 
+test('keeps source-backed formulas in decorated text panels native even with labelled SVG previews',()=>{
+  for(const [latex,palette] of [['R=UI','#eff2f7'],['a+b','#efe9db']]){
+    const preview='<svg role="img" aria-label="公式预览" viewBox="0 0 10 10"><path d="M0 0 L10 10"/></svg>';
+    const panel=content=>`<section style="padding:10px;border:2px solid #446;background-color:${palette}"><p>第一段解释</p><p>第二段 ${content}</p></section>`;
+    const result=cleanArticle(panel(`<span data-formula="${latex}">${preview}</span>`));
+    const doc=parse(result.html);
+    assert.equal(result.stats.removedAnswerPanelBackgrounds,1);
+    assert.equal(doc.querySelector('[data-formula]').getAttribute('data-formula'),latex);
+    assert.equal(findRasterTargets(doc).length,0);
+    for(const graphic of [preview,`<span data-formula="">${preview}</span>`]){
+      assert.equal(cleanArticle(panel(graphic)).stats.removedAnswerPanelBackgrounds,0,'unbacked graphics keep their panel');
+    }
+  }
+});
+
 test('faint repeating article textures do not capture entire articles or their images/formulas',()=>{
   const texture=(alpha,size=24)=>`<section style="background-image:linear-gradient(90deg,rgba(20,30,40,${alpha}) 0%,transparent 15%),linear-gradient(0deg,rgba(40,20,30,${alpha}) 0%,transparent 20%);background-size:${size}px ${size}px;background-repeat:repeat"><p>第一段</p><p>第二段 <span data-formula="x^2"></span></p><p>${picture('figure')}</p></section>`;
   const cleaned=cleanArticle(texture(.03));

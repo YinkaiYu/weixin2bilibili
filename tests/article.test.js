@@ -43,6 +43,35 @@ test('handles split footer heading and does not remove image before it', () => {
   assert.doesNotMatch(result.html, /Top10|删除/);
 });
 
+test('keeps the standalone article editor credit between recap and site recommendations', () => {
+  for (const [heading, credit, color] of [
+    ['上期回顾', '<p><strong>编辑：甲 &amp; 乙</strong></p>', '#888'],
+    ['【往期回顾】', '<section><span>编辑</span> : <b>Lin</b></section>', '#745'],
+  ]) {
+    const input = `<p>正文仍保留</p><section><p><strong>${heading}</strong></p><div><p>旧文章</p><p>编辑：回顾文章的编辑</p></div>${credit.replace('>', ` style="color:${color}">`)}<hr><p><br></p><section><span>近期热门文章</span><b>Top10</b></section></section><p>热门榜单里的内容</p>`;
+    const result = cleanArticle(input);
+    const body = doc(result.html).body;
+    assert.equal(body.children.length, 2);
+    assert.match(body.lastElementChild.textContent, /^(编辑：甲 & 乙|编辑 : Lin)$/);
+    assert.ok(body.lastElementChild.style.color);
+    assert.ok(body.lastElementChild.querySelector('strong,b'));
+    assert.doesNotMatch(body.textContent, /回顾|旧文章|热门/);
+    assert.equal(cleanArticle(result.html).html, result.html);
+  }
+});
+
+test('does not restore credits from nested recap cards, recommendations, or giveaways', () => {
+  for (const footer of [
+    '<h2>上期回顾</h2><section><p>旧文章</p><p>编辑：回顾文章的编辑</p></section><h2>近期热门文章Top10</h2>',
+    '<h2>上期回顾</h2><h2>近期热门文章Top10</h2><p>编辑：热门榜单的编辑</p>',
+    '<h2>上期回顾</h2><p>编辑：隐藏署名</p><img src="https://mmbiz.qpic.cn/banner.png"><h2>近期热门文章Top10</h2>',
+    '<h2>福利时间</h2><p>编辑：福利栏编辑</p><h2>近期热门文章Top10</h2>',
+  ]) {
+    const main = '这是文章正文。'.repeat(10);
+    assert.equal(doc(cleanArticle(`<p>${main}</p>${footer}`).html).body.textContent, main);
+  }
+});
+
 test('strips external link destination and raw URLs, blank spacer blocks and unsafe content', () => {
   const result = cleanArticle(`<div><p>&nbsp;<br></p><section><p> </p></section><p><a href="https://external.test" onclick="x()">保留标签</a> https://external.test/a。</p>
     <p style="background-image:url(https://evil.test);color:blue" onclick="alert(1)">安全文字<script>alert(1)</script><img data-src="https://mmbiz.qpic.cn/ok.png" srcset="https://evil.test 2x" onerror="alert(1)"></p></div>`);

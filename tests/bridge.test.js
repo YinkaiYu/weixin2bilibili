@@ -45,18 +45,20 @@ test('trusts only this extension top-frame native editor sender',()=>{
     {...sender,frameId:1},
     {...sender,tab:undefined},
     {...sender,url:'https://member.bilibili.com.evil.test/york/read-editor'},
-    {...sender,url:'https://member.bilibili.com/platform/home'},
-    {...sender,url:'https://member.bilibili.com/platform/upload/text'},
-    {...sender,url:'https://member.bilibili.com/platform/upload/text/new-edit/other'},
-    {...sender,url:'https://member.bilibili.com/york/read-editor-extra'},
+    {...sender,url:'blob:https://member.bilibili.com/opaque-id'},
     {...sender,url:'https://u:p@member.bilibili.com/york/read-editor'},
+    {...sender,origin:'null'},
+    {...sender,tab:{id:1}},
     {...sender,tab:{...sender.tab,url:'https://mp.weixin.qq.com/s/article'}},
   ])assert.equal(isTrustedNativeSender(bad,extensionId),false);
+  for(const path of ['/platform/home','/platform/upload/text','/platform/upload/text/new-edit/other','/york/read-editor-extra']){
+    assert.equal(isTrustedNativeSender({...sender,tab:{...sender.tab,url:'https://member.bilibili.com'+path}},extensionId),false);
+  }
 });
 
 test('wrapper editor can call named methods while nested editor frames remain denied',async()=>{
   const app=fixture();const url='https://member.bilibili.com/platform/upload/text/new-edit';
-  const top={...sender,url,tab:{...sender.tab,url}};
+  const top={...sender,url:'https://member.bilibili.com/platform/home',origin:'https://member.bilibili.com',tab:{...sender.tab,url}};
   const ok=await app.handler({type:'BILI_API',method:'listCollections'},top);
   assert.equal(ok.ok,true);assert.equal(ok.data[0].name,'正经玩');
   const nested=await app.handler({type:'BILI_API',method:'listCollections'},{...top,url:sender.url,frameId:1});

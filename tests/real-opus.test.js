@@ -17,7 +17,8 @@ const cases = [
   { name: '今年诺奖奖金又上涨了一百万？！发了125年，诺贝尔的钱为什么越花越多？.html', raster: 0, images: 13, formulas: 0, captions: 7 },
   { name: '遍地开花的拼豆店，卖的竟是“诺奖物理”？（内附物理所拼豆图纸）.html', raster: 0, images: 26, formulas: 18, captions: 12 },
   { name: '不抽血不拍片，闻一闻就能接收身体警报？？？.html', tail: 'fu福li利shi时jian间', raster: 0, images: 3, formulas: 0, captions: 1 },
-  { name: '为什么只睡20分钟，下午就能精神满满？_ No. 537.html', tail: '投票', raster: 8, images: 15, formulas: 14, captions: 0 },
+  { name: '为什么只睡20分钟，下午就能精神满满？_ No. 537.html', tail: '投票', ordinaryUrls: 5, raster: 3, images: 10, formulas: 19, captions: 0 },
+  { name: '为什么你的车行驶再快，也甩不掉车里那只蚊子？_ No. 539.html', tail: '投票', raster: 0, images: 7, formulas: 22, captions: 0 },
   { name: '你知道你的手机有多清晰吗？居然用一束光就能测量手机的清晰度？ _ 正经玩.html', tail: '上期回顾', raster: 0, images: 15, emotes: ['[doge]'], formulas: 11, captions: 4 },
   { name: '摸了半天找不到头，胶带却记得你撕到哪儿？.html', raster: 0, images: 12, formulas: 4, captions: 9 },
   { name: '要宣布翻篇了？那我磁化损失呢，厉娜.html', raster: 0, images: 21, formulas: 0, captions: 19 },
@@ -33,6 +34,21 @@ const formulaSources=body=>[...(body.matches?.('[data-formula],[data-latex]')?[b
 const scriptSources=body=>[...body.querySelectorAll('sup,sub')].map(node=>({tag:node.localName,text:node.textContent}));
 const latexKey=latex=>compact(latex).replace(/^\[|\]$/g,'');
 
+const newerScienceSample=path.join(directory,'这东西怎么还搞区别对待？偏偏只对你闪闪发亮！ _ 正经玩.html');
+test('latest saved science article restores its standalone credit as the last native paragraph', {skip:!fs.existsSync(newerScienceSample)},()=>{
+  const parser=new document.defaultView.DOMParser();
+  const source=fs.readFileSync(newerScienceSample,'utf8');
+  const raw=parser.parseFromString(source,'text/html');
+  const credit=[...raw.querySelectorAll('#js_content p')].find(p=>p.textContent.trim()==='编辑：晨曙＆Spin');
+  assert.ok(credit,'source contains article editor credit');
+  const parsed=parser.parseFromString(parseArticle(source,{document}).html,'text/html');
+  assert.doesNotMatch(parsed.body.textContent,/上期回顾|往期回顾|近期热门文章Top10/);
+  assert.equal(parsed.body.lastElementChild.textContent,credit.textContent);
+  const native=toOpus(parsed.body.lastElementChild.outerHTML,{document});
+  assert.deepEqual(native.blockingIssues,[]);
+  assert.equal(native.content.paragraphs[0].text.nodes[0].word.words,credit.textContent);
+});
+
 function sourceBaseline(html,sample){
   const raw=new document.defaultView.DOMParser().parseFromString(html,'text/html'),body=raw.querySelector('#js_content');
   const tail=sample.tail||'近期热门文章Top10';
@@ -40,14 +56,19 @@ function sourceBaseline(html,sample){
   assert.ok(marker,`independently reviewed tail: ${tail}`);
   const range=raw.createRange();range.selectNodeContents(body);range.setEndBefore(marker);
   const retained=raw.createElement('main');retained.append(range.cloneContents());
+  if(sample.tail==='上期回顾'){
+    const credit=[...body.querySelectorAll('p')].find(p=>compact(p.textContent)==='编辑：晨曙＆Spin');
+    assert.ok(credit,'independently reviewed standalone source credit');
+    retained.append(credit.cloneNode(true));
+  }
   for(const node of [...retained.querySelectorAll('*')])if(node.hidden||node.style.display==='none'||compact(node.textContent)==='左右滑动查看更多')node.remove();
   for(const paragraph of retained.querySelectorAll('p'))if(compact(paragraph.textContent).startsWith('认真阅读下面的文章'))paragraph.remove();
   // The five unlinked DOI URLs are excluded by the user's ordinary-link rule;
   // their surrounding author/title/reference text is still in the baseline.
-  if(sample.tail==='投票'){
+  if(sample.ordinaryUrls){
     const walker=raw.createTreeWalker(retained,4),urls=[];
     while(walker.nextNode())walker.currentNode.textContent=walker.currentNode.textContent.replace(/https?:\/\/[^\s]+/g,url=>{urls.push(url);return '';});
-    assert.equal(urls.length,5);
+    assert.equal(urls.length,sample.ordinaryUrls);
   }
   if(sample.name.includes('厉娜')) for(const [index,image] of [...retained.querySelectorAll('img')].entries()) if(!contentFigureIndices.includes(index))image.remove();
   // Reviewed header assets 0–12: opening promotion, paper, clip, waves, leaves and flowers.
@@ -160,6 +181,11 @@ for (const sample of cases) {
     const representedText=result.content.paragraphs.map(paragraph=>paragraph.pic?.pics.map(picture=>uploaded.get(picture.url).text+(picture.comment||'')).join('')||(paragraph.text?.nodes||[]).map(node=>node.word?.words||node.link?.show_text||(node.formula?(explicitFormulaNodes.has(node)?'':scriptText(node.formula.latex_content)):'')).join('')).join('');
     assertText(compact(representedText),baseline.text,'native words, captions, script text and recorded raster text jointly preserve the independent source text');
     if (sample.name.includes('正经玩')) {
+      const last=result.content.paragraphs.at(-1);
+      assert.equal(last.text.nodes[0].word.words,'编辑：晨曙＆Spin');
+      assert.equal(last.format.align,2);
+      assert.equal(last.text.nodes[0].word.color,'#888888');
+      assert.equal(last.text.nodes[0].word.style.bold,true);
       assert.equal(pictures.filter(p => p.url.endsWith('.gif')).length, 1);
       assert.ok(result.content.paragraphs.some(p=>p.text?.nodes.some(n=>n.word?.words==='实验器材')),'title remains native text');
       assert.deepEqual(pictures.map((p, index) => p.comment ? index : -1).filter(index => index >= 0), [0, 3, 12, 13]);
@@ -173,7 +199,7 @@ for (const sample of cases) {
       const standaloneEquation=captures.find(capture=>capture.formulas.length===1&&capture.formulas[0]===baseline.formulas[1]);
       assert.ok(standaloneEquation);assert.equal(standaloneEquation.text,'');
       assert.ok(captures.some(capture=>capture.formulas.length===5&&capture.text.startsWith('其中')),'the explanation is captured separately from its standalone equation');
-      assert.equal(captures.flatMap(capture=>capture.scripts).length,5);
+      assert.ok(captures.every(capture=>capture.scripts.length===0),'citation superscripts do not trigger rasterization');
       assert.equal(pictures.filter(picture=>uploaded.get(picture.url).images.length===1).length,baseline.images.length);
       const fallbackCaptions=[...doc.querySelectorAll('figcaption')];
       assert.equal(fallbackCaptions.length,3);

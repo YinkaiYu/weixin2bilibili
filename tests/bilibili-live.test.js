@@ -26,6 +26,11 @@ function reconstruct(){
   assert.equal(lazyBackgrounds.length,1);
   assert.equal(lazyBackgrounds[0].parentElement.textContent.trim(),'实验器材');
   lazyBackgrounds[0].removeAttribute('data-lazy-bgimg');
+  // The historical draft predates preserving the editor credit after the recap.
+  const credit=[...historicalSource.window.document.querySelectorAll('#js_content p')]
+    .find(p=>p.textContent.trim()==='编辑：晨曙＆Spin');
+  assert.ok(credit);
+  credit.remove();
   // The historical JSDOM cleanup omitted background shorthands. Freeze that
   // old input explicitly; current production cleanup retains their solid color.
   for(const element of historicalSource.window.document.querySelectorAll('#js_content [style]')) {

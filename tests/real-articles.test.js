@@ -43,6 +43,11 @@ function sourceBaseline(source,expected){
   assert.ok(marker,`reviewed source tail: ${tail}`);
   const range=raw.createRange();range.selectNodeContents(body);range.setEndBefore(marker);
   const retained=raw.createElement('main');retained.append(range.cloneContents());
+  if(expected.collection==='正经玩'){
+    const credit=[...body.querySelectorAll('p')].find(p=>compact(p.textContent)==='编辑：晨曙＆Spin');
+    assert.ok(credit,'independently reviewed standalone source credit');
+    retained.append(credit.cloneNode(true));
+  }
   for(const node of [...retained.querySelectorAll('*')])if(node.hidden||node.style.display==='none'||compact(node.textContent)==='左右滑动查看更多')node.remove();
   for(const paragraph of retained.querySelectorAll('p'))if(compact(paragraph.textContent).startsWith('认真阅读下面的文章'))paragraph.remove();
   if(expected.collection==='问答'){

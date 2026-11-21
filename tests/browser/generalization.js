@@ -50,6 +50,14 @@ document.querySelector('#run').onclick=async()=>{
       const preparedPaper=await prepareForNative(paper.html);
       assert(paper.stats.removedDecorativeBackgrounds===1&&preparedPaper.rasterized===0,'纸纹不能使整篇正文转图');
       assert(parse(preparedPaper.html).images.length===1&&parse(preparedPaper.html).querySelector('[data-formula="x^2"]'),'内容图片和公式完整保留');
+      const navigation='<pre><code>问答导航<br>Q1 第一条新问题<br>Q2 第二条新问题</code></pre>';
+      const directory=cleanArticle(`<section style="background:${background}">${navigation}</section>`);
+      const preparedDirectory=await prepareForNative(directory.html);
+      assert(directory.stats.removedDecorativeBackgrounds===1&&preparedDirectory.rasterized===0,'导航纸纹不应触发转图');
+      const paragraphs=toOpus(preparedDirectory.html,{document}).content.paragraphs;
+      assert(paragraphs.length===3&&paragraphs.every(p=>p.para_type===1),'问答导航应保留三行原生文字');
+      const code=cleanArticle(`<section style="background:${background}">${navigation.replace('问答导航','示例代码')}</section>`);
+      assert(code.stats.removedDecorativeBackgrounds===0,'普通代码块的背景继续保留');
     }
     results.push('通过：多层纸纹与默认背景尺寸保持正文原生');
     const gif='data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';

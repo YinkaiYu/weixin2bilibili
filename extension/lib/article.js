@@ -1,6 +1,7 @@
 /** Article extraction and loss-aware cleanup. No requests or page scripts are executed. */
 import {scriptAlbumTitles} from './source-metadata.js';
 import {normalizeSourceLink} from './source-links.js';
+import {questionNavigationLines} from './opus.js';
 const HTML_TAGS = new Set('p div section article main header footer figure figcaption span a strong b em i u s strike del sup sub br hr img h1 h2 h3 h4 h5 h6 ul ol li blockquote pre code table thead tbody tfoot tr td th caption colgroup col'.split(' '));
 const SVG_TAGS = new Set('svg g path rect circle ellipse line polyline polygon text tspan defs clippath mask lineargradient radialgradient stop title desc'.split(' '));
 const MATH_TAGS = new Set('math mrow mi mn mo mtext mspace ms mfrac msqrt mroot msub msup msubsup munder mover munderover mtable mtr mtd mfenced menclose semantics annotation'.split(' '));
@@ -283,8 +284,14 @@ function normalizeGradientBackgrounds(body) {
 // Low-opacity repeating paper/grid textures behind an article are page furniture,
 // not a reason to rasterize all paragraphs, photographs and formula sources.
 function faintArticleTexture(element,gradient) {
-  if(!['section','div','article','main'].includes(element.localName)||element.querySelectorAll('p').length<3 ||
+  if(!['section','div','article','main'].includes(element.localName) ||
     element.closest('figure,figcaption,table,pre,code') || ['role','aria-label','title'].some(key=>element.hasAttribute(key)))return false;
+  // A navigation-only wrapper can use the same paper texture as the article.
+  // Only the recognized question directory qualifies, not arbitrary code blocks.
+  const child=element.firstElementChild;
+  const navigationOnly=element.childElementCount===1 && child.localName==='pre' &&
+    normalizedText(element.textContent)===normalizedText(child.textContent) && questionNavigationLines(child);
+  if(!navigationOnly && element.querySelectorAll('p').length<3)return false;
   const sizes=cssArguments(element.style.backgroundSize),repeats=cssArguments(element.style.backgroundRepeat),layers=cssArguments(gradient);
   if(!sizes?.length||!repeats?.length||!layers?.length)return false;
   let opacity=0;
@@ -320,9 +327,16 @@ function framedTextCard(element) {
   // Figure/legend/code context and graphical contents can give the backdrop a
   // meaning that text contrast alone cannot establish. Source-backed formula
   // fallbacks are excluded because those graphics will become native formulas.
-  if(element.closest('figure,figcaption,table,pre,code,blockquote') || element.querySelector('figure,figcaption,table,pre,code,blockquote,[role],[aria-label]')) return false;
+  if(element.closest('figure,figcaption,table,pre,code,blockquote') || element.querySelector('figure,figcaption,table,pre,code,blockquote')) return false;
+  // WeChat labels its rendered formula SVGs as illustrations for accessibility.
+  // A labelled fallback with actual LaTeX still represents text, not a figure.
+  const isFormulaFallback = node => {
+    const source = node.closest(FORMULA_SELECTOR);
+    return source && (source.getAttribute('data-formula') || source.getAttribute('data-latex') || '').trim();
+  };
+  if([...element.querySelectorAll('[role],[aria-label]')].some(node=>!isFormulaFallback(node))) return false;
   const graphics=[...element.querySelectorAll('img,svg,math,video,audio,canvas,object,embed,iframe')];
-  if(graphics.some(node=>!node.closest(FORMULA_SELECTOR))) return false;
+  if(graphics.some(node=>!isFormulaFallback(node))) return false;
   return true;
 }
 
@@ -779,10 +793,14 @@ function removeOpeningInteractionLead(body) {
   first.remove();return 1;
 }
 
+function tailHeadingText(element) {
+  return (characterCards(element)?.text || normalizedText(element.textContent)).toLowerCase()
+    .replace(/^[\-—–·•|｜:：【】\[\]《》「」『』<>()（）]+|[\-—–·•|｜:：【】\[\]《》「」『』<>()（）]+$/g, '');
+}
+
 function isTailHeading(element,body) {
   if (containsTemplateMedia(element,'img,svg,math,video,audio')) return false;
-  let text = (characterCards(element)?.text || normalizedText(element.textContent)).toLowerCase();
-  text = text.replace(/^[\-—–·•|｜:：【】\[\]《》「」『』<>()（）]+|[\-—–·•|｜:：【】\[\]《》「」『』<>()（）]+$/g, '');
+  const text = tailHeadingText(element);
   if(['上期回顾', '往期回顾', '近期热门文章top10','上期也精彩'].includes(text)) return true;
   if(text==='投票' && /^h[1-6]$/.test(element.localName)) return true;
   if(text!=='福利时间' && !/^互动问题(?:[:：].{0,160})?$/.test(text)) return false;
@@ -792,6 +810,24 @@ function isTailHeading(element,body) {
   return normalizedText(before.toString()).length>=40;
 }
 
+function followsRecap(recap, node) {
+  return Boolean(recap.compareDocumentPosition(node) & recap.DOCUMENT_POSITION_FOLLOWING) && !recap.contains(node);
+}
+
+function footerEditorCredit(recap, popularHeading) {
+  // The article's standalone credit is the last text block before the sitewide
+  // recommendations. Skip dividers and blank spacers, but don't look inside
+  // recap cards or scan arbitrary promotional text for an editor name.
+  const media = 'img,svg,math,table,video,audio,iframe,[data-formula],[data-latex]';
+  let credit = popularHeading.previousElementSibling;
+  while (credit && !normalizedText(credit.textContent) && !credit.matches(media) && !credit.querySelector(media)) {
+    credit = credit.previousElementSibling;
+  }
+  if (!credit || !followsRecap(recap, credit)) return null;
+  if (!credit.matches('p,div,section') || credit.querySelector(media + ',p,div,section,ul,ol,blockquote,figure,hr,br')) return null;
+  return /^编辑[:：][^。！？!?]{1,80}$/.test(normalizedText(credit.textContent)) ? credit : null;
+}
+
 function trimTail(body) {
   const matches=element=>isTailHeading(element,body);
   const candidates = [...body.querySelectorAll('h1,h2,h3,h4,h5,h6,p,section,div,span,strong,b')].filter(matches);
@@ -799,10 +835,18 @@ function trimTail(body) {
   if (!found) return false;
   let boundary = found;
   while (boundary.parentElement && boundary.parentElement !== body && matches(boundary.parentElement)) boundary = boundary.parentElement;
+  let credit = null;
+  if (['上期回顾', '往期回顾'].includes(tailHeadingText(found))) {
+    const popularHeading = candidates.find(element =>
+      tailHeadingText(element) === '近期热门文章top10' && followsRecap(boundary, element)
+    );
+    if (popularHeading) credit = footerEditorCredit(boundary, popularHeading);
+  }
   const range = body.ownerDocument.createRange();
   range.setStartBefore(boundary);
   range.setEnd(body, body.childNodes.length);
   range.deleteContents();
+  if (credit) body.append(credit);
   return true;
 }
 

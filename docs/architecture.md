@@ -44,7 +44,7 @@ flowchart TD
 
 [manifest.json](../extension/manifest.json) 在 `member.bilibili.com` 注入静态脚本，以支持站内 SPA 路由；`native-ui.js` 只在 `/york/read-editor`、`/platform/upload/text/new-edit` 和 `/platform/upload/text/edit` 激活控件。模块通过受该站点限制的 `web_accessible_resources` 加载。
 
-运行特权操作前，后台同时检查扩展 ID、顶层 frame、发送页面和 tab URL。内容脚本不通过 `window.postMessage` 暴露调用入口。B 站 cookie、CSRF 与带会话 API 请求留在 service worker。
+运行特权操作前，后台检查扩展 ID、顶层 frame 及消息来源。发送页面必须属于 B 站创作中心，编辑器路由以浏览器提供的当前标签页地址为准，因为站内切换可能保留脚本注入时的消息来源地址。内容脚本不通过 `window.postMessage` 暴露调用入口。B 站 cookie、CSRF 与带会话 API 请求留在 service worker。
 
 | 消息 | 方向与用途 |
 | --- | --- |

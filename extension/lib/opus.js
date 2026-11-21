@@ -139,7 +139,7 @@ function preformattedText(el) {
   return clone.textContent || '';
 }
 
-function questionNavigationLines(el) {
+export function questionNavigationLines(el) {
   const code = el.querySelector('code') || el;
   if (/(?:language|lang)-[\w+-]+/.test(code.className || '') || code.querySelector('img,svg,math,table,[data-formula],[data-latex]')) return null;
   const breaks = [...code.querySelectorAll('br')];
@@ -256,6 +256,25 @@ function editableHeadingColor(element) {
 function isScriptElement(element) {
   return ['SUP','SUB'].includes(element.tagName)||['super','sub'].includes(element.style.verticalAlign);
 }
+function isReferenceSuperscript(element) {
+  if(element.tagName!=='SUP' && element.style.verticalAlign!=='super')return false;
+  return /^(?:\[\d{1,3}(?:\s*[,，、–-]\s*\d{1,3})*\]\s*)+$/u.test(element.textContent.trim()) &&
+    [...element.querySelectorAll('*')].every(child=>['SPAN','STRONG','B','EM','I','A'].includes(child.tagName) && explicitLatex(child)===null);
+}
+
+function canOmitReferenceBackground(element, inherited) {
+  // Citation indices are independent of the highlighted words they follow.
+  // Keep explicit paint on the citation itself and any background needed for
+  // contrast. Only let a readable citation leave an inherited light surface.
+  if([element,...element.querySelectorAll('*')].some(node=>paintedBackground(node).painted))return false;
+  const paper=pageBackdrop(element);
+  if(!paper||contrast(paper,NATIVE_PAGE_COLOR)>1.6)return false;
+  return textRuns(element,inherited).every(({style})=>{
+    const ink=rgbaColor(style.color||'#000000');
+    return ink && contrast(composite(ink,NATIVE_PAGE_COLOR),NATIVE_PAGE_COLOR)>=contrast(composite(ink,paper),paper);
+  });
+}
+
 function precedingScriptBase(element) {
   // subSup consumes only the immediately preceding word's trailing Latin,
   // numeric or Greek base. Do not cross paragraph, formula or media boundaries.
@@ -325,11 +344,13 @@ export function analyzeNativeTextBackgrounds(input) {
       return;
     }
     if(isScriptElement(node)) {
+      const reference=isReferenceSuperscript(node);
+      if(reference&&canOmitReferenceBackground(node,carry))return;
       if(style.background&&!style.pageBackground)report(node,owner,'formula-background');
       for(const run of textRuns(node,carry)) {
         if(run.style.background&&!run.style.pageBackground)report(node,effectiveBackground(run.element).element,'formula-background');
       }
-      const base=precedingScriptBase(node),baseBackground=base&&effectiveBackground(base);
+      const base=reference?null:precedingScriptBase(node),baseBackground=base&&effectiveBackground(base);
       if(baseBackground?.style.background&&!baseBackground.style.pageBackground)report(node,baseBackground.element,'formula-background');
     }
     for(const child of node.childNodes)visit(child,style,owner);
@@ -502,6 +523,11 @@ export function toOpus(html, { images = new Map(), document: owner, sourceLinkVa
 
   function subSup(el, inherited, nodes) {
     const style = stylesFor(el, inherited);
+    const reference=isReferenceSuperscript(el);
+    if(reference&&canOmitReferenceBackground(el,inherited)){
+      style.background='';
+      style.pageBackground=false;
+    }
     checkScriptStyle(style);
     if (el.querySelector('img,svg,math,table')) {
       issue('上下标包含图片或复杂公式，无法自动保留为原生文字公式。');
@@ -515,11 +541,11 @@ export function toOpus(html, { images = new Map(), document: owner, sourceLinkVa
     let base = '{}';
     const last = nodes.at(-1);
     // Join adjacent sub/sup on the same base, instead of creating two floating scripts.
-    if (last?.node_type === 5 && last.__scriptFormula) {
+    if (!reference && last?.node_type === 5 && last.__scriptFormula) {
       base = last.__scriptFormula;
       nodes.pop();
       stats.formulas--;
-    } else if (last?.node_type === 1) {
+    } else if (!reference && last?.node_type === 1) {
       const m = last.word.words.match(/[A-Za-z0-9\u0370-\u03ff]+$/u);
       if (m) {
         const savedStyle = {
@@ -552,7 +578,7 @@ export function toOpus(html, { images = new Map(), document: owner, sourceLinkVa
     const latex = `${base}${kind}{${scriptContents(el, style)}}`;
     const formula = { node_type: 5, formula: { latex_content: latex } };
     // Temporary non-enumerable state never leaks into the saved native payload.
-    Object.defineProperty(formula, '__scriptFormula', { value: latex });
+    if(!reference)Object.defineProperty(formula, '__scriptFormula', { value: latex });
     nodes.push(formula);
     stats.formulas++;
     warn('上下标已转换为 B 站原生行内公式，可在 B 站公式编辑器中继续修改。');
