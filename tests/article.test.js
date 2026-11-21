@@ -737,3 +737,49 @@ test('omits only standalone WeChat sliding hints, retaining body mentions and co
   assert.ok(result.warnings.includes('已清除微信组件的滑动提示。'));
   assert.equal(cleanArticle(result.html).html,result.html);
 });
+const videoArticleUrl='https://mp.weixin.qq.com/s/video-example';
+const playerUrl=id=>`https://mp.weixin.qq.com/mp/readtemplate?t=pages/video_player_tmpl&amp;vid=${id}`;
+
+test('converts lazy WeChat embeds and loaded players to covers and original-article links',()=>{
+  const poster1='http://mmbiz.qpic.cn/first-poster.jpg?wx_fmt=jpeg';
+  const poster2='https://mmbiz.qlogo.cn/second-poster.png';
+  const lazy=`<iframe data-src="${playerUrl('wxv_702')}&amp;action=mpvideo" data-mpvid="wxv_702" data-cover="${encodeURIComponent(poster1)}"></iframe>`;
+  const loaded=`<span class="rich_pages video_iframe" data-src="${playerUrl('wxv_819')}"><div><svg><path d="M0 0L1 1"/></svg><video src="https://mpvideo.qpic.cn/short-lived.mp4" poster="${poster2}"></video><button>播放器控件</button></div></span>`;
+  const input=`<p><strong style="color:#345678">影片前${lazy}影片后</strong></p><section>${loaded}</section><p style="color:#888;font-size:14px">实验过程</p><h2>往期回顾</h2>${lazy}`;
+  const result=cleanArticle(input,{sourceUrl:videoArticleUrl}),content=doc(result.html);
+
+  assert.equal(result.stats.wechatVideoPreviews,2);
+  assert.deepEqual(result.blockingIssues,[]);
+  assert.deepEqual([...content.images].map(image=>image.src),[poster1.replace('http:','https:'),poster2]);
+  assert.deepEqual([...content.querySelectorAll('a')].map(a=>[a.getAttribute('data-sync-source-link'),a.href,a.textContent]),[
+    ['true',videoArticleUrl,'观看原文视频 1'],['true',videoArticleUrl,'观看原文视频 2'],
+  ]);
+  assert.deepEqual([...content.querySelectorAll('strong')].map(e=>[e.textContent,e.style.color]),[['影片前','rgb(52, 86, 120)'],['影片后','rgb(52, 86, 120)']]);
+  assert.equal(content.querySelector('figcaption').textContent,'实验过程');
+  assert.doesNotMatch(result.html,/iframe|<svg|mpvideo\.qpic|播放器控件/);
+  assert.equal(cleanArticle(result.html).html,result.html);
+});
+
+test('keeps the position of known players with missing covers and flags unrelated embeds',()=>{
+  const iframe=`<iframe src="${playerUrl('wxv_611')}" data-cover="https://mmbiz.qpic.cn.example.test/cover.png"></iframe>`;
+  const preview=cleanArticle(iframe);
+  assert.deepEqual(preview.blockingIssues,[]);
+  assert.equal(preview.stats.images,0);
+  assert.equal(doc(preview.html).body.textContent,'视频 1（请在微信原文观看）');
+  const linked=cleanArticle(iframe,{sourceUrl:videoArticleUrl});
+  assert.equal(doc(linked.html).querySelector('a').href,videoArticleUrl);
+  for(const variant of [
+    iframe.replace('mp.weixin.qq.com','mp.weixin.qq.com.example.test'),
+    iframe.replace('/mp/readtemplate','/s/other'),
+    iframe.replace('pages/video_player_tmpl','pages/something_else'),
+    iframe.replace('wxv_611','not-a-wechat-video-id'),
+    iframe.replace('<iframe','<iframe data-mpvid="wxv_612"'),
+    iframe.replace('&amp;vid=', '&amp;action=other&amp;vid='),
+    '<video src="https://example.test/movie.mp4"></video>',
+  ]){
+    const cleaned=cleanArticle(variant,{sourceUrl:videoArticleUrl});
+    assert.equal(cleaned.stats.wechatVideoPreviews,0);
+    assert.ok(cleaned.blockingIssues.some(issue=>/iframe|video/.test(issue)));
+    assert.equal(doc(cleaned.html).querySelector('a'),null);
+  }
+});

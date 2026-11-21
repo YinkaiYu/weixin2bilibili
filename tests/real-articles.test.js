@@ -193,6 +193,50 @@ for (const expected of expectations) {
   });
 }
 
+const videoFixture=path.join(fixtureDir,'这段难听的声音，竟然这么好看？这可能是最适合用眼睛“听”的实验之一 _ 正经玩.html');
+test('saved WeChat video article preserves pre-recap text and media order in both player representations', {skip:!fs.existsSync(videoFixture)},()=>{
+  const source=fs.readFileSync(videoFixture,'utf8'),parser=new DOMParser();
+  const raw=parser.parseFromString(source,'text/html'),body=raw.querySelector('#js_content');
+  const players=[...body.querySelectorAll('span.video_iframe')];
+  assert.equal(players.length,2,'two loaded videos in the saved source');
+  const posters=players.map(node=>{
+    const url=new URL(decodeURIComponent(node.getAttribute('data-cover')));
+    url.protocol='https:';
+    return url.href;
+  });
+  const boundary=[...body.querySelectorAll('section')].find(node=>compact(node.textContent)==='上期回顾');
+  assert.ok(boundary,'reviewed body boundary');
+  const range=raw.createRange();range.selectNodeContents(body);range.setEndBefore(boundary);
+  const reviewed=raw.createElement('main');reviewed.append(range.cloneContents());
+  for(const [index,player] of [...reviewed.querySelectorAll('span.video_iframe')].entries()){
+    const cover=raw.createElement('img');cover.src=posters[index];player.replaceWith(cover);
+  }
+  for(const node of [...reviewed.querySelectorAll('*')])if(node.hidden||node.style.display==='none')node.remove();
+  const expectedText=compact(reviewed.textContent);
+  const expectedImages=[...reviewed.querySelectorAll('img')].map(imageSource).filter(Boolean);
+
+  // Recreate the iframe tag as supplied before the page loads its video UI.
+  for(const player of players){
+    const iframe=raw.createElement('iframe');
+    for(const name of ['data-src','data-mpvid','data-cover'])iframe.setAttribute(name,player.getAttribute(name));
+    player.replaceWith(iframe);
+  }
+  const loaded=parseArticle(source);
+  const lazy=parseArticle(raw.documentElement.outerHTML,{sourceUrl:loaded.sourceUrl});
+  for(const result of [loaded,lazy]){
+    assert.equal(result.stats.wechatVideoPreviews,2);
+    assert.equal(result.stats.gifs,3);
+    assert.equal(result.stats.captions,3);
+    assert.deepEqual(result.blockingIssues,[]);
+    const cleaned=parser.parseFromString(result.html,'text/html');
+    assert.deepEqual([...cleaned.images].map(img=>img.src),expectedImages);
+    const links=[...cleaned.querySelectorAll('a[data-sync-source-link]')];
+    assert.deepEqual(links.map(a=>[a.href,a.textContent]),[[loaded.sourceUrl,'观看原文视频 1'],[loaded.sourceUrl,'观看原文视频 2']]);
+    for(const link of links)link.parentElement.remove();
+    assertText(compact(cleaned.body.textContent),expectedText,'source text without player controls or generated links');
+  }
+});
+
 if (process.env.WRITE_ARTICLE_AUDIT === '1') {
   fs.mkdirSync(path.join(root,'test-artifacts'), { recursive:true });
   fs.writeFileSync(path.join(root,'test-artifacts','article-audit.json'),JSON.stringify({

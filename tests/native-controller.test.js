@@ -138,6 +138,30 @@ test('saved pictures use actual upload metadata in source order, including repea
   }finally{app.close();}
 });
 
+for(const state of ['accepted','rejected'])test(`direct import keeps a WeChat video preview with original link ${state}`,async()=>{
+  const player='https://mp.weixin.qq.com/mp/readtemplate?t=pages/video_player_tmpl&amp;action=mpvideo&amp;vid=wxv_6704';
+  const sourceHtml=articleHtml().replace('<h2>往期回顾</h2>',`<p>影片前文</p><p><iframe data-src="${player}" data-cover="${encodeURIComponent(originalImage)}"></iframe></p><p style="color:#888;font-size:14px">实验演示</p><p>影片后文</p><h2>往期回顾</h2>`);
+  const app=setup({sourceHtml});
+  try{
+    app.switches.sourceLinkState=state;
+    const result=await runImport({sourceUrl});
+    assert.equal(result.verified,true);
+    assert.deepEqual(result.errors,[]);
+    assert.ok(result.warnings.some(message=>message.includes('已保留 1 个微信视频')));
+    assert.equal(app.uploads.length,1,'the existing cover and the identical preview image share an upload');
+    assert.equal(app.apiCalls.some(({url})=>url.includes('/mp/readtemplate')||url.includes('mpvideo.qpic.cn')),false);
+    const paragraphs=app.savedPayloads[0].arg.opus.content.paragraphs;
+    const blocks=paragraphs.slice(-4);
+    assert.equal(blocks[0].text.nodes[0].word.words,'影片前文');
+    assert.equal(blocks[2].pic.pics[0].url,uploadedImage);
+    assert.equal(blocks[2].pic.pics[0].comment,'实验演示');
+    assert.equal(blocks[3].text.nodes[0].word.words,'影片后文');
+    const nodes=blocks[1].text.nodes;
+    if(state==='accepted')assert.ok(nodes.some(n=>n.link?.link===sourceUrl&&n.link.show_text==='观看原文视频 1'));
+    else assert.equal(nodes.map(n=>n.word.words).join(''),`原文链接：观看原文视频 1（${sourceUrl}）`);
+  }finally{app.close();}
+});
+
 test('direct import carries a grey image caption through cleanup upload save and readback exactly once',async()=>{
   const caption='显微镜下的实验样品';
   const sourceHtml=articleHtml().replace('<h2>往期回顾</h2>',`<p style="color:#888;font-size:14px;text-align:center">${caption}</p><p>下一段正文保持可编辑。</p><h2>往期回顾</h2>`);

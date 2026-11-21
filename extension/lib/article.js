@@ -729,6 +729,75 @@ function safeSourceHref(raw) {
   return normalizeSourceLink(value.startsWith('//')?`https:${value}`:value);
 }
 
+function isWeChatVideoPlayer(element) {
+  // Match the public player metadata in both the lazy iframe and the loaded span.
+  return ['data-src','src'].some(name=>{
+    const href=safeSourceHref(element.getAttribute(name));
+    if(!href)return false;
+    const url=new URL(href),id=url.searchParams.get('vid'),action=url.searchParams.get('action');
+    const declared=element.getAttribute('data-mpvid');
+    return url.origin==='https://mp.weixin.qq.com' && url.pathname==='/mp/readtemplate' &&
+      url.searchParams.get('t')==='pages/video_player_tmpl' && (action===null||action==='mpvideo') &&
+      /^wxv_\d+$/.test(id||'') && (!declared||declared===id);
+  });
+}
+
+function videoPosterUrl(raw) {
+  if(!raw)return '';
+  // The lazy iframe's cover attribute can be encoded as a single URL component.
+  let href=safeSourceHref(raw);
+  if(!href) {
+    try { href=safeSourceHref(decodeURIComponent(raw)); } catch { return ''; }
+  }
+  if(!href)return '';
+  const url=new URL(href);
+  if(url.port||!['mmbiz.qpic.cn','mmbiz.qlogo.cn'].includes(url.hostname))return '';
+  url.protocol='https:';
+  return url.href;
+}
+
+function replaceWeChatVideoPlayers(body,sourceUrl) {
+  const document=body.ownerDocument,href=safeSourceHref(sourceUrl);
+  const article=href?new URL(href):null;
+  const articleLink=article?.origin==='https://mp.weixin.qq.com' && /^\/s(?:\/|$)/.test(article.pathname) ? article.href : '';
+  let count=0;
+  for(const player of body.querySelectorAll('iframe,span.video_iframe')) {
+    if(!body.contains(player)||!isWeChatVideoPlayer(player))continue;
+    const label=`观看原文视频 ${++count}`;
+    const caption=document.createElement('p');
+    if(articleLink) {
+      const anchor=document.createElement('a');
+      anchor.href=articleLink;
+      anchor.textContent=label;
+      caption.append('原文链接：',anchor);
+    } else caption.textContent=`视频 ${count}（请在微信原文观看）`;
+    const preview=document.createElement('section');
+    preview.append(caption);
+    const poster=videoPosterUrl(player.getAttribute('data-cover')) || videoPosterUrl(player.querySelector('video')?.getAttribute('poster'));
+    if(poster) {
+      const box=document.createElement('p'),image=document.createElement('img');
+      image.src=poster;
+      image.alt=`原文视频 ${count} 的封面`;
+      box.append(image);
+      preview.append(box);
+    }
+    const paragraph=player.closest('p');
+    if(!paragraph) {
+      player.replaceWith(preview);
+      continue;
+    }
+    // Split around an inline player so the preview isn't a block inside a
+    // paragraph. Range extraction keeps the text and formatting on either side.
+    const range=document.createRange(),after=paragraph.cloneNode(false);
+    range.selectNodeContents(paragraph);
+    range.setStartAfter(player);
+    after.append(range.extractContents());
+    player.remove();
+    paragraph.after(preview,after);
+  }
+  return count;
+}
+
 function originalSourceHref(anchor) {
   const href=safeSourceHref(anchor.getAttribute('href'));
   if(!href || !normalizedText(anchor.textContent)) return '';
@@ -965,6 +1034,7 @@ export function cleanArticle(html, options = {}) {
     card.remove();stats.removedLiveNotices++;
   }
   stats.trimmedTail=trimTail(body)?1:0;
+  stats.wechatVideoPreviews=replaceWeChatVideoPlayers(body,options.sourceUrl);
   const gradients=normalizeGradientBackgrounds(body);
   stats.removedDecorativeBackgrounds+=gradients.decorative;
   stats.adaptedGradientMarkers=gradients.markers;
@@ -985,6 +1055,7 @@ export function cleanArticle(html, options = {}) {
   if(stats.removedOpeningLeads) warnings.push('已清除开头的微信互动赠书引导。');
   if(stats.removedComponentHints) warnings.push('已清除微信组件的滑动提示。');
   if(stats.removedLiveNotices) warnings.push('已清除视频号直播预约卡片。');
+  if(stats.wechatVideoPreviews) warnings.push(`已保留 ${stats.wechatVideoPreviews} 个微信视频的位置和可用封面。可到微信原文观看，或在 B站草稿中补上视频。`);
   if (stats.trimmedTail) warnings.push('已删除回顾、福利互动或投票等尾部栏目及其后面的内容。');
 
   for (let element of [...body.querySelectorAll('*')]) {
