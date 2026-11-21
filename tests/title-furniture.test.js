@@ -42,6 +42,55 @@ test('ordinary image collages, body illustrations, pale labels and unmirrored im
   }
 });
 
+const inlineSlot='display:inline-block;vertical-align:middle';
+function inlineFrame({title='实验方法',color='#376284',size=20,width=32,mirror='rotateY(180deg)',side='right'}={}){
+  const edge=key=>`<section style="${inlineSlot}"><div style="width:${width}px;${key===side?`transform:${mirror}`:''}">${picture(key+'-'+width)}</div></section>`;
+  return `${edge('left')} <!-- spacer --> <section style="${inlineSlot};font-size:${size}px;font-weight:700;color:${color}">${title}</section>${edge('right')}`;
+}
+
+test('clears mirrored inline title edges without changing the surrounding article',()=>{
+  const first=inlineFrame();
+  const second=inlineFrame({title:'Unexpected results',color:'#78355a',size:16,width:23,side:'left',mirror:'scaleX( -1 )'}).replaceAll('alt="图片"','alt="图片" style="width:100%"');
+  const before='<p>正文前段</p>';
+  const between=`<figure>${picture('measurement','style="width:32px"')}<figcaption>测量示意</figcaption></figure>`;
+  const after=`<p>其他实验</p>${picture('animation','data-type="gif" style="width:23px"')}<p>后续正文</p>`;
+  const source=`<div>${before}${first}${between}${second}${after}</div>`;
+  const result=cleanArticle(source),doc=parse(result.html);
+  assert.deepEqual(result.removedDecorativeImages.map(x=>x.imageIndex),[0,1,3,4]);
+  assert.deepEqual([...doc.images].map(img=>img.src),['https://mmbiz.qpic.cn/measurement.png','https://mmbiz.qpic.cn/animation.png']);
+  assert.deepEqual([...doc.querySelectorAll('section')].map(s=>[s.textContent,s.style.color,s.style.fontWeight]),[
+    ['实验方法','rgb(55, 98, 132)','700'],
+    ['Unexpected results','rgb(120, 53, 90)','700'],
+  ]);
+  assert.equal(doc.body.textContent,parse(source).body.textContent);
+  assert.equal(doc.querySelector('figcaption').textContent,'测量示意');
+  assert.equal(result.stats.gifs,1);
+  assert.equal(findRasterTargets(doc).length,0);
+});
+
+test('preserves inline images with content cues or without a matching title frame',()=>{
+  const source=inlineFrame();
+  const variants=[
+    source.replace('rotateY(180deg)','rotate(10deg)'),
+    source.replace('width:32px','width:40px'),
+    source.replace('font-weight:700','font-weight:400'),
+    inlineFrame({width:140}),
+    source.replace('<!-- spacer -->','<br>'),
+    source.replace('<!-- spacer -->','正文'),
+    source.replace('alt="图片"','alt="示意图"'),
+    source.replace('alt="图片"','alt="" data-latex="q^2"'),
+    source.replace('<section style=','<section aria-label="实验条件" style='),
+    source+'<p style="color:gray;font-size:12px">图：实验步骤</p>',
+    `<figure>${source}<figcaption>研究过程</figcaption></figure>`,
+    `<section style="display:grid">${source}</section>`,
+  ];
+  for(const html of variants){
+    const result=cleanArticle(html);
+    assert.equal(result.stats.removedDecorativeImages,0,html);
+    assert.equal(result.stats.images,2);
+  }
+});
+
 test('opening banners do not hide animated title furniture; independent GIFs and scientific overlays stay',()=>{
   for(const [title,color,count] of [['探究新的材料','#ff8100',4],['A new discovery','#354f80',7]]){
     const banner=picture('opening','data-type="gif"');

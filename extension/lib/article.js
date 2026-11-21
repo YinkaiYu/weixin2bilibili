@@ -389,6 +389,16 @@ function gridCell(css) {
   return row+'|'+column;
 }
 
+function inlineTitleSlot(label,direction) {
+  let node=label[direction];
+  while(node && (node.nodeType===8 || node.nodeType===3 && !normalizedText(node.textContent))) node=node[direction];
+  return node?.nodeType===1 ? node : null;
+}
+
+const isMiddleInlineBlock=node=>['inline-block','inline flow-root'].includes(node?.style?.display) && node.style.verticalAlign==='middle';
+const hasHorizontalMirror=node=>[node,...node.querySelectorAll('[style]')].some(el=>
+  /^(?:rotateY\(\s*180deg\s*\)|scaleX\(\s*-1\s*\))$/i.test(el.style.transform));
+
 // Typography-only title furniture: classify the role of a whole component,
 // never a source URL, article phrase, image count, color or template dimension.
 function removeTitleFurniture(body,imageIndices) {
@@ -400,7 +410,7 @@ function removeTitleFurniture(body,imageIndices) {
     ['title','aria-label','data-caption'].some(key=>normalizedText(image.getAttribute(key))) ||
     !['','图片','image'].includes(normalizedText(image.getAttribute('alt')).toLowerCase());
   const textOnly=node=>!node.querySelector('img,'+protectedMedia) && normalizedText(node.textContent);
-  const bold=node=>[...node.querySelectorAll('strong,b,h1,h2,h3,h4,h5,h6,[style]')].some(el=>
+  const bold=node=>[node,...node.querySelectorAll('strong,b,h1,h2,h3,h4,h5,h6,[style]')].some(el=>
     normalizedText(el.textContent) && (el.matches('strong,b,h1,h2,h3,h4,h5,h6') || /^(bold|[6-9]00)$/.test(el.style.fontWeight)));
   const discard=(image,reason)=>{removed.push({imageIndex:imageIndices.get(image),sourceUrl:image.getAttribute('data-src')||image.getAttribute('src')||'',reason});image.remove();};
   const flow=node=>{
@@ -457,6 +467,36 @@ function removeTitleFurniture(body,imageIndices) {
     if(!mirrored&&!chapter)continue;
     for(const image of images)discard(image,mirrored?'mirrored-title-frame':'chapter-title-badge');
     for(const slot of slots)slot.remove();
+  }
+  // Editors can paste a title as three inline boxes among unrelated blocks.
+  // Inspect only the adjacent boxes so the rest of that parent stays intact.
+  const nonTitleContent='a,hr,ul,ol,pre,code,blockquote,'+protectedMedia+','+[...UNSUPPORTED_MEDIA].join(',');
+  const edgeContent=nonTitleContent+',[aria-label],[aria-labelledby],[aria-describedby],[title],[data-caption],[role],[data-lazy-bgimg],[data-sync-background-url],[data-sync-gradient]';
+  for(const label of body.querySelectorAll('[style]')) {
+    if(!isMiddleInlineBlock(label)||!textOnly(label)||normalizedText(label.textContent).length>100||!bold(label))continue;
+    if(/grid|flex/.test(label.parentElement.style.display))continue;
+    if(label.closest(nonTitleContent)||label.querySelector(nonTitleContent+',br')||label.querySelectorAll('p,h1,h2,h3,h4,h5,h6').length>1)continue;
+    const left=inlineTitleSlot(label,'previousSibling'),right=inlineTitleSlot(label,'nextSibling');
+    if(!isMiddleInlineBlock(left)||!isMiddleInlineBlock(right)||hasHorizontalMirror(left)===hasHorizontalMirror(right))continue;
+    const edges=[left,right];
+    const images=edges.map(edge=>{
+      if(edge.matches(edgeContent)||edge.querySelector(edgeContent)||normalizedText(edge.textContent))return null;
+      if([edge,...edge.querySelectorAll('[style]')].some(node=>hasBackgroundImage(node.style)))return null;
+      const pictures=edge.matches('img')?[edge]:[...edge.querySelectorAll('img')];
+      return pictures.length===1&&!contentImage(pictures[0])?pictures[0]:null;
+    });
+    const widths=images.map(img=>{
+      if(!img)return 0;
+      const explicit=img.style.width;
+      const width=(['','auto','100%'].includes(explicit)?img.parentElement.style.width:explicit).match(/^([\d.]+)px$/);
+      return width ? Number(width[1]) : 0;
+    });
+    // A matched pair of icon-sized boxes supports the decorative role.
+    if(widths[0]!==widths[1]||widths[0]<=0||widths[0]>4*captionTextStyle(label).size)continue;
+    const following=nextCaptionNode(right,body);
+    if(following?.matches?.('figcaption,caption')||firstCaptionCandidate(following))continue;
+    for(const image of images)discard(image,'mirrored-inline-title-frame');
+    for(const edge of edges)edge.remove();
   }
   return removed;
 }

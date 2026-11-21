@@ -73,6 +73,14 @@ document.querySelector('#run').onclick=async()=>{
     assert(parse(furnitureNative.html).images.length===1,'正文配图不能被删');
     assert(parse(furnitureNative.html).body.textContent==='新的主题标题新的小标题正文配图保留实验数据','标题、正文与图注必须完整');
     results.push('通过：标题装饰清理、文字可编辑与正文配图保留');
+    const inlineBox='display:inline-block;vertical-align:middle';
+    const inlineFurniture=cleanArticle(`<div><p>前文</p><section style="${inlineBox}"><img src="${red}" style="width:28px"></section><section style="${inlineBox};font-size:20px;color:#376284"><strong>新的小节</strong></section><section style="${inlineBox};transform:rotateY(180deg)"><img src="${blue}" style="width:28px"></section><p>后文</p></div>`);
+    assert(inlineFurniture.stats.removedDecorativeImages===2,'混排小标题的镜像装饰应移除');
+    const inlinePrepared=await prepareForNative(inlineFurniture.html);
+    assert(inlinePrepared.rasterized===0,'混排小标题不应转图');
+    const inlineWords=toOpus(inlinePrepared.html,{document}).content.paragraphs.flatMap(p=>p.text?.nodes.map(n=>n.word?.words)||[]);
+    assert(JSON.stringify(inlineWords)===JSON.stringify(['前文','新的小节','后文']),'标题与前后段落保持原生顺序');
+    results.push('通过：混排标题边饰清理，保留前后段落');
     const overlay=`<section style="display:grid;grid-template-columns:100%;grid-template-rows:100%;width:240px;height:120px"><div style="grid-column-start:1;grid-row-start:1"><img src="${blue}" style="display:block;width:240px;height:120px"></div><div style="grid-column-start:1;grid-row-start:1;width:60px;height:60px;margin:20px 0 0 30px"><img src="${red}" style="display:block;width:60px;height:60px"></div><div style="grid-column-start:1;grid-row-start:1;align-self:end;color:white;font-weight:bold">保留全部叠层内容</div></section>`;
     const cleaned=cleanArticle(overlay);
     assert(parse(cleaned.html).images.length===2,'未经确认的图片必须保留');

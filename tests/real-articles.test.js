@@ -12,6 +12,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const fixtureDir = path.join(root, '测试文章');
 globalThis.DOMParser = new JSDOM('').window.DOMParser;
 const expectations = [
+  {file:'同样是猫科，为什么东北虎不怕冷？.html', collection:'线上科学日', images:7, gifs:0, formulas:7, superscripts:0, subscripts:0, backgrounds:0, captions:4},
   {file:'美瞳爱好者集合，新眼珠享新人生.html', collection:'线上科学日', images:21, gifs:6, formulas:0, superscripts:0, subscripts:0, backgrounds:0, captions:4},
   {file:'细思极恐！为什么我们在三维空间里永远走不出镜像？.html', collection:'线上科学日', images:3, gifs:0, formulas:82, superscripts:0, subscripts:0, backgrounds:0, captions:0},
   {file:'今年诺奖奖金又上涨了一百万？！发了125年，诺贝尔的钱为什么越花越多？.html', collection:'线上科学日', images:13, gifs:3, formulas:0, superscripts:0, subscripts:0, backgrounds:0, captions:9},
@@ -26,6 +27,8 @@ const entries = [];
 const compact=text=>text.replace(/[\s\u200B-\u200D\uFEFF]/g,'');
 // Independently reviewed content figures; all other pre-tail assets are title furniture.
 const contentFigureIndices=[14,16,19,23,26,27,30,31,32,35,37,40,43,44,46,49,50,53,57,60,63];
+// Reviewed pairs of mirrored ornaments surrounding the five subheadings.
+const tigerHeadingEdges=new Set([3,4,5,6,8,9,10,11,13,14]);
 function assertText(actual,expected,message){
   let index=0;while(index<actual.length&&index<expected.length&&actual[index]===expected[index])index++;
   assert.ok(actual===expected,`${message}; first difference ${index}, lengths ${actual.length}/${expected.length}; actual ${JSON.stringify(actual.slice(Math.max(0,index-20),index+60))}; expected ${JSON.stringify(expected.slice(Math.max(0,index-20),index+60))}`);
@@ -58,6 +61,7 @@ function sourceBaseline(source,expected){
   if(expected.file.includes('厉娜')) for(const [index,image] of [...retained.querySelectorAll('img')].entries()) if(!contentFigureIndices.includes(index))image.remove();
   // Reviewed header assets 0–12: opening promotion, paper, clip, waves, leaves and flowers.
   if(expected.file.includes('美瞳')) for(const [index,image] of [...retained.querySelectorAll('img')].entries()) if(index<=12)image.remove();
+  if(expected.file.includes('东北虎')) for(const [index,image] of [...retained.querySelectorAll('img')].entries()) if(tigerHeadingEdges.has(index))image.remove();
   return {body:retained,text:compact(retained.textContent),images:[...retained.querySelectorAll('img')].map(imageSource).filter(Boolean),formulas:formulaSources(retained),scripts:[...retained.querySelectorAll('sup,sub')].map(node=>({tag:node.localName,text:node.textContent}))};
 }
 
@@ -170,6 +174,8 @@ for (const expected of expectations) {
     } else if(expected.file.includes('美瞳')) {
       assert.equal(parsed.stats.removedDecorativeImages,13);
       assert.deepEqual(parsed.removedDecorativeImages.map(item=>item.imageIndex).sort((a,b)=>a-b),Array.from({length:13},(_,i)=>i));
+    } else if(expected.file.includes('东北虎')) {
+      assert.deepEqual(parsed.removedDecorativeImages.map(item=>item.imageIndex),[...tigerHeadingEdges]);
     } else assert.equal(parsed.stats.removedDecorativeImages,0);
     if (expected.collection==='正经玩') {
       assert.equal(document.querySelectorAll('[data-sync-background-url]').length,0,'empty title ribbon is decorative');
